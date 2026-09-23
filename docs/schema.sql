@@ -61,6 +61,9 @@ CREATE TABLE surveys (
     brief_json  TEXT CHECK (brief_json IS NULL OR json_valid(brief_json)),  -- SurveyBrief given to the generator
     generation_model          TEXT,          -- null for fully hand-written surveys
     generation_prompt_version TEXT,
+    draft_status TEXT NOT NULL DEFAULT 'none'
+                 CHECK (draft_status IN ('none','generating','ready','failed')),  -- Gemini draft job state
+    draft_error  TEXT,
     approved_at TEXT,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -110,6 +113,7 @@ CREATE TABLE simulation_runs (
                     CHECK (status IN ('queued','running','paused','stopped','cancelled','completed','failed')),
         -- stopped = "Stop & Save Progress": partial results kept and reportable; cancelled = discarded
     est_cost_usd    REAL,
+    error           TEXT,                    -- why the run paused or failed, e.g. an invalid key
     started_at      TEXT,
     finished_at     TEXT,
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))

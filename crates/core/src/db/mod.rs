@@ -3,6 +3,8 @@
 
 pub mod cohorts;
 pub mod projects;
+pub mod runs;
+pub mod surveys;
 pub mod writer;
 
 use std::path::Path;

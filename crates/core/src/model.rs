@@ -315,3 +315,228 @@ pub struct RespondentDetail {
     pub screen_status: String,
     pub screen_reason: String,
 }
+
+// ---- Step 3: questionnaire ----
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum QuestionType {
+    SingleChoice,
+    MultiChoice,
+    Likert,
+    Numeric,
+    OpenEnded,
+}
+
+impl QuestionType {
+    pub fn as_db(self) -> &'static str {
+        match self {
+            Self::SingleChoice => "single_choice",
+            Self::MultiChoice => "multi_choice",
+            Self::Likert => "likert",
+            Self::Numeric => "numeric",
+            Self::OpenEnded => "open_ended",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Option<Self> {
+        Some(match s {
+            "single_choice" => Self::SingleChoice,
+            "multi_choice" => Self::MultiChoice,
+            "likert" => Self::Likert,
+            "numeric" => Self::Numeric,
+            "open_ended" => Self::OpenEnded,
+            _ => return None,
+        })
+    }
+
+    pub fn is_choice(self) -> bool {
+        matches!(self, Self::SingleChoice | Self::MultiChoice)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ChoiceOption {
+    /// Stable within the question ("A", "B", …); answers store this code.
+    pub code: String,
+    pub label: String,
+}
+
+/// Likert scale, e.g. 1–7 with end labels.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Scale {
+    pub min: i32,
+    pub max: i32,
+    pub min_label: String,
+    pub max_label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NumericRange {
+    pub min: f64,
+    pub max: f64,
+    pub unit: String,
+}
+
+/// The part of a question a reviewer edits. Which fields apply depends on the type:
+/// options (choice types), scale (likert), numeric (numeric).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct QuestionBody {
+    pub text: String,
+    pub question_type: QuestionType,
+    pub options: Vec<ChoiceOption>,
+    /// Shuffle option order per respondent (choice types).
+    pub randomize: bool,
+    /// Most options a respondent may pick (multi choice).
+    pub max_choices: Option<u32>,
+    pub scale: Option<Scale>,
+    pub numeric: Option<NumericRange>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum QuestionOrigin {
+    Ai,
+    AiEdited,
+    Human,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ReviewStatus {
+    /// In the AI suggestions sidebar; not part of the survey until added.
+    Suggested,
+    Pending,
+    Accepted,
+    Rejected,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Question {
+    #[ts(type = "number")]
+    pub id: i64,
+    pub code: String,
+    pub order_index: u32,
+    pub body: QuestionBody,
+    pub is_active: bool,
+    pub origin: QuestionOrigin,
+    pub review_status: ReviewStatus,
+    /// What the question is for (from the draft); shown to the reviewer, never to respondents.
+    pub objective: Option<String>,
+    pub rationale: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum SurveyStatus {
+    Draft,
+    InReview,
+    Approved,
+}
+
+/// State of the Gemini draft for a survey.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum DraftStatus {
+    /// Written by hand; no draft requested.
+    None,
+    Generating,
+    Ready,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Survey {
+    #[ts(type = "number")]
+    pub id: i64,
+    #[ts(type = "number")]
+    pub project_id: i64,
+    pub title: String,
+    pub intro: String,
+    pub status: SurveyStatus,
+    pub draft_status: DraftStatus,
+    pub draft_error: Option<String>,
+    /// Active questions in survey order.
+    pub questions: Vec<Question>,
+    /// AI suggestions not yet added.
+    pub suggestions: Vec<Question>,
+}
+
+// ---- Step 4: simulation ----
+
+/// Options for Run Survey Simulation. Everything else is fixed per run and snapshotted.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RunConfig {
+    /// Seeds option shuffling; defaults to the cohort's seed.
+    #[ts(type = "number | null")]
+    pub seed: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SimulationRun {
+    #[ts(type = "number")]
+    pub id: i64,
+    #[ts(type = "number")]
+    pub project_id: i64,
+    #[ts(type = "number")]
+    pub survey_id: i64,
+    #[ts(type = "number")]
+    pub cohort_id: i64,
+    pub status: RunStatus,
+    pub model: String,
+    pub respondents: u32,
+    pub questions: u32,
+    /// Stored answers (any status).
+    pub answered: u32,
+    pub respondents_done: u32,
+    /// Why the run paused or failed, e.g. an invalid key.
+    pub error: Option<String>,
+    pub created_at: String,
+}
+
+impl RunStatus {
+    pub fn as_db(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::Paused => "paused",
+            Self::Stopped => "stopped",
+            Self::Cancelled => "cancelled",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Self {
+        match s {
+            "running" => Self::Running,
+            "paused" => Self::Paused,
+            "stopped" => Self::Stopped,
+            "cancelled" => Self::Cancelled,
+            "completed" => Self::Completed,
+            "failed" => Self::Failed,
+            _ => Self::Queued,
+        }
+    }
+}
