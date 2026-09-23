@@ -6,8 +6,8 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 | Milestone | Wizard steps delivered | Estimate | Status |
 | --- | --- | --- | --- |
-| M1 Skeleton and contracts | Step 1 form (saves locally), shell, stepper | 1 week | 12 of 16 items done |
-| M2 Personas | Step 1 → Step 2 end to end | 1.5 weeks | Not started |
+| M1 Skeleton and contracts | Step 1 form (saves locally), shell, stepper | 1 week | Closed; 3 items deferred to BACKLOG |
+| M2 Personas | Step 1 → Step 2 end to end | 1.5 weeks | In progress |
 | M3 Questionnaire and Simulation | Steps 3 and 4 | 2.5 weeks | Not started |
 | M4 Report | Step 5 | 1.5 weeks | Not started |
 | M5 Validity and release | All steps hardened; signed installer | 1 week | Not started |
@@ -55,31 +55,31 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 12. [x] Windows CI job green: `tauri build` produces the `.msi` and NSIS `.exe`; both pass the 15 MB check (the two together are 6.5 MB zipped).
 
-**Left in M1**
+**Closed on 2026-09-23.** The remaining items were split by whether M2 depends on them:
 
-13. Settings screen: enter, test and delete the Gemini key; model IDs (Flash for personas and answers, Pro for drafting, critic, themes, synthesis and judging); Gemini usage tier; price table. First launch opens it when no key is stored.
-14. Autosave Step 1 on blur (`save_survey_info`), and reopen a project at `projects.wizard_step`.
-15. `ScriptedLlm`: in-process fake provider for engine tests (test plan §3).
-16. Frontend lint (ESLint with the React hooks rules) in the web CI job.
+- Moved into M2 (M2 needs them): `ScriptedLlm` (M2 item 0) and a minimal first-launch Gemini key prompt (M2 item 10).
+- Deferred to [`BACKLOG.md`](BACKLOG.md): the full Settings screen (B1), Step 1 autosave and project reopen (B2), frontend lint (B3).
 
-**Exit:** the Windows job produces an installer under 15 MB; the key round-trips through Credential Manager; `test_connection` lists models for a real key; Step 1 saves and reopens.
+**Exit (as closed):** the Windows job produces installers under 15 MB; a real key lists models and completes a structured call. Deferred exit items are tracked in BACKLOG B1–B2.
 
 ## M2 — Personas: Step 1 → Step 2 (about 1.5 weeks)
 
 **Rust track**
 
+0. `ScriptedLlm`: in-process fake provider for engine tests (test plan §3), moved from M1.
 1. `tools/build-populations` (offline Python, never shipped): US census microdata → joint table of age band × gender × region × income × occupation group, under 1 MB, in `crates/core/data/populations/US.csv`.
 2. `sampling`: draw skeletons with a seeded ChaCha RNG; rake to the quota marginals (iterative proportional fitting); apportion with the existing largest-remainder function. Countries without a census table sample each quota dimension independently. Tests: exact counts, same seed → same cohort, joint constraints respected.
 3. `PersonaEnrichment` schema per product category (for mobile phones: device age, current brand, upgrade trigger), checked against Gemini's JSON Schema subset by a unit test.
 4. `engine::cohort` job: batches of 8, diversity hint, screening with redraw from the same quota cell (failed personas kept as `screen_status = 'failed'`), validate → retry once → split batch, save per batch through the writer, stream `CohortProgress`.
 5. Shared rate limiter (`governor`): requests per minute, input tokens per minute, requests per day, defaults from the Gemini tier.
 6. `generate_cohort` starts the persona job (and, from M3, the draft job) and returns at once. `get_cohort_summary`, `list_respondents` (search in SQL), `get_respondent`, `regenerate_cohort` (new version), `lock_cohort`.
-7. Mark the cohort "out of date" when Step 1 audience fields change after generation.
+7. ~~Mark the cohort "out of date"~~ — deferred to BACKLOG B4.
 
 **UI track**
 
 8. Step 2: progress while generating, five summary cards, respondent grid with search, profile drawer, Regenerate Cohort, Proceed to Questionnaire (locks the cohort).
 9. Stepper rules from DATA_FLOW §2: a step opens only when its precondition holds.
+10. Minimal first-launch prompt for the Gemini key (store, test with `test_connection`), moved from M1; the full Settings screen is BACKLOG B1.
 
 **Exit:** 200 personas generated against the live API match quotas exactly; the same seed reproduces the same demographics; engine tests pass on `ScriptedLlm`.
 
