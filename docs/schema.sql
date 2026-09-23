@@ -47,6 +47,12 @@ CREATE TABLE surveys (
     title       TEXT NOT NULL,
     intro_text  TEXT,                        -- shown to respondents before Q1
     version     INTEGER NOT NULL DEFAULT 1,
+    status      TEXT NOT NULL DEFAULT 'draft'
+                CHECK (status IN ('draft','in_review','approved')),
+    brief_json  TEXT CHECK (brief_json IS NULL OR json_valid(brief_json)),  -- SurveyBrief given to the generator
+    generation_model          TEXT,          -- null for fully hand-written surveys
+    generation_prompt_version TEXT,
+    approved_at TEXT,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
@@ -64,6 +70,14 @@ CREATE TABLE questions (
         -- numeric: {"min":0, "max":10000, "unit":"USD"}
     skip_logic_json TEXT CHECK (skip_logic_json IS NULL OR json_valid(skip_logic_json)),
     is_active      INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
+    origin         TEXT NOT NULL DEFAULT 'human'
+                   CHECK (origin IN ('ai','ai_edited','human')),
+    review_status  TEXT NOT NULL DEFAULT 'pending'
+                   CHECK (review_status IN ('pending','accepted','rejected')),
+    objective      TEXT,                     -- research objective this question serves (from the brief)
+    rationale      TEXT,                     -- generator's reason for asking; never shown to respondents
+    original_json  TEXT CHECK (original_json IS NULL OR json_valid(original_json)),  -- AI draft before human edits
+    reviewed_at    TEXT,
     UNIQUE (survey_id, order_index),
     UNIQUE (survey_id, code)
 );
@@ -95,7 +109,7 @@ CREATE TABLE llm_calls (
     run_id          INTEGER REFERENCES simulation_runs(id) ON DELETE CASCADE,
     cohort_id       INTEGER REFERENCES cohorts(id) ON DELETE CASCADE,  -- set for Phase 1 calls
     respondent_id   INTEGER REFERENCES respondents(id) ON DELETE CASCADE,
-    purpose         TEXT NOT NULL CHECK (purpose IN ('persona','answer','theme','critic')),
+    purpose         TEXT NOT NULL CHECK (purpose IN ('persona','survey_draft','answer','theme','critic')),
     attempt         INTEGER NOT NULL DEFAULT 1,
     http_status     INTEGER,
     input_tokens    INTEGER,
@@ -145,6 +159,24 @@ CREATE TABLE settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL                      -- never the API key; that lives in the OS keychain
 );
+
+-- A run may only start on an approved survey whose active questions were all accepted by a person.
+CREATE TRIGGER trg_runs_require_approved_survey
+BEFORE INSERT ON simulation_runs
+WHEN (SELECT status FROM surveys WHERE id = NEW.survey_id) IS NOT 'approved'
+  OR EXISTS (SELECT 1 FROM questions
+             WHERE survey_id = NEW.survey_id AND is_active = 1 AND review_status <> 'accepted')
+BEGIN
+    SELECT RAISE(ABORT, 'survey_not_approved');
+END;
+
+-- Editing an approved survey's questions sends it back to review.
+CREATE TRIGGER trg_question_edit_reopens_survey
+AFTER UPDATE OF question_text, question_type, options_json, skip_logic_json, is_active ON questions
+BEGIN
+    UPDATE surveys SET status = 'in_review', approved_at = NULL
+    WHERE id = NEW.survey_id AND status = 'approved';
+END;
 
 CREATE INDEX idx_respondents_cohort   ON respondents(cohort_id);
 CREATE INDEX idx_questions_survey     ON questions(survey_id, order_index);

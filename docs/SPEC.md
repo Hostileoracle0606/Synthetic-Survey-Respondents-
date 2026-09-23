@@ -9,7 +9,8 @@ We will build a Windows desktop app that runs market-research surveys against a 
 **Goals**
 
 - Generate a cohort of N personas (default 100, max 1,000) that exactly match user-defined demographic quotas.
-- Run a survey of up to 50 questions against the cohort, streaming answers to the UI as they arrive.
+- Draft a survey of up to 50 questions with the LLM from a research brief; a person reviews and approves every question before it is used.
+- Run the approved survey against the cohort, streaming answers to the UI as they arrive.
 - Store every persona, prompt, answer and run setting locally so results can be reproduced and compared.
 - Show live distributions, cross-tabs and open-ended themes, and export results to CSV and JSON.
 
@@ -28,7 +29,7 @@ We will build a Windows desktop app that runs market-research surveys against a 
 | Installer size | < 15 MB |
 | Backend | Local only: Rust process + embedded SQLite; no server, no Python runtime |
 | Network | Outbound HTTPS to the configured LLM endpoint only |
-| LLM provider | Google Gemini API for every LLM feature (personas, answers, critic, theme coding, evals) |
+| LLM provider | Google Gemini API for every LLM feature (personas, survey drafting, answers, critic, theme coding, evals) |
 | Memory | Rust process ≤ 50 MB and WebView2 renderer ≤ 100 MB, with a 1,000-respondent project open |
 
 ## 2. Architecture
@@ -69,7 +70,7 @@ The UI never sees the API key and never runs SQL; it only calls commands and rec
 **Rust module layout**
 
 - `commands/` — Tauri command handlers; validation only.
-- `engine/` — persona generation, survey runs, cancellation, resume.
+- `engine/` — persona generation, survey drafting, survey runs, cancellation, resume.
 - `llm/` — provider trait, adapters, prompt templates, cost table.
 - `db/` — migrations, the single writer task, read queries.
 - `sampling/` — quota sampler and demographic tables.
@@ -98,7 +99,43 @@ Rust decides who is in the cohort; the LLM only describes them. This guarantees 
 
 **Failure handling:** a batch that fails schema validation is retried once with the validation error in the prompt, then split into single-persona calls.
 
-## 4. Phase 2 — Survey simulation
+## 4. Phase 2 — Survey drafting and simulation
+
+### 4.1 Survey drafting (LLM-generated, human-reviewed)
+
+Gemini writes the first draft of the survey; a person reviews every question. No question reaches a respondent until a person has accepted it.
+
+**Inputs (`SurveyBrief`)**
+
+- Research goal and the product, concept or topic being tested.
+- 1–8 research objectives, e.g. "Measure willingness to pay for the premium tier".
+- Target audience, described in words. This is separate from the cohort.
+- Number of questions (5–50), preferred mix of question types, and maximum length in minutes.
+- Topics or wording to include or avoid, and survey language.
+
+**Steps**
+
+1. **Draft.** One structured-output call to the Pro-tier model returns an intro text and the questions. Each question has a type, text, options or scale, the objective it serves, a one-line rationale and any suggested skip logic. The survey is saved with `status = 'in_review'`, and every question with `origin = 'ai'` and `review_status = 'pending'`.
+2. **Automatic critique.** `critique_survey` runs on the draft straight away. Flags such as leading, double-barrelled or loaded wording appear on each question card.
+3. **Human review.** For each question the reviewer can:
+    - **accept** it as written;
+    - **edit** it, which sets `origin = 'ai_edited'` and accepts it (the AI's original is kept in `original_json`);
+    - **reject** it;
+    - **regenerate** it, optionally with an instruction such as "make it less leading" (one call, replacing the pending question).
+
+    The reviewer can also reorder questions, add their own (`origin = 'human'`) or ask for more questions for an objective.
+4. **Coverage check.** The review screen shows each objective with its accepted questions, and warns when an objective has none.
+5. **Approve.** `approve_survey` succeeds only when no active question is `pending`, at least one question is accepted and every critic flag has been fixed or dismissed. The survey becomes `approved`. Rejected questions are kept for the record but set inactive.
+6. **Edits after approval** send the survey back to `in_review`. Earlier runs are unaffected because each run stores a hash of the survey it used.
+
+**Independence rules**
+
+- The generator never sees the cohort or any persona, so questions cannot be tailored to the respondents who will answer them.
+- The generator produces no expected answers or predicted results. Its schema has no field for them, and the prompt forbids predictions in the rationale.
+- Respondents see only the intro, question text and options. They never see the objective, rationale or critic flags, so the researcher's intent cannot steer the answers.
+- The database refuses to start a run unless the survey is `approved` and every active question is `accepted` (a trigger in `schema.sql`), so the review step can't be bypassed.
+
+### 4.2 Simulation
 
 One task per respondent answers the survey in order, so answers stay consistent and a 100 × 20 survey costs about 100 calls instead of 2,000.
 
@@ -166,7 +203,7 @@ v1 ships one adapter, for the Gemini API `generateContent` endpoint. It uses `ge
 | Log-probabilities | `generationConfig.responseLogprobs` and `logprobs`. Support varies by model, so the adapter probes it in `test_connection` and sets `Capabilities.logprobs` |
 | Errors | `429 RESOURCE_EXHAUSTED` → `RateLimited`; 500/503 → `Transient`; 400 → `InvalidRequest`; 401/403 → `Auth`; a response blocked by safety filters is stored with `status = 'refused'` |
 
-**Models.** Model IDs are settings, never hard-coded. Defaults: a Flash-tier model for persona generation and answering; a Pro-tier model for the survey critic, theme coding and eval judging. Prefer stable models over `-preview` ones for defaults. As of September 2026 the Gemini docs list `gemini-3.8-flash` and `gemini-3.1-pro-preview`; `test_connection` lists the models the key can use.
+**Models.** Model IDs are settings, never hard-coded. Defaults: a Flash-tier model for persona generation and answering; a Pro-tier model for survey drafting, the survey critic, theme coding and eval judging. Prefer stable models over `-preview` ones for defaults. As of September 2026 the Gemini docs list `gemini-3.8-flash` and `gemini-3.1-pro-preview`; `test_connection` lists the models the key can use.
 
 **API key.** The user enters their Gemini key in Settings; it is stored in Windows Credential Manager. CI and development read it from the `GEMINI_API_KEY` environment variable and never write it to disk.
 
@@ -188,10 +225,11 @@ The schema adds cohorts, surveys, runs and an LLM call log to the original draft
 
 **Changes from the draft**
 
-- `surveys` table added; the draft's commands took a `survey_id` that had no table.
+- `surveys` table added; the draft's commands took a `survey_id` that had no table. It also stores the review status, the brief and the generator model and prompt version.
 - `cohorts` added, so a project can hold several cohort versions and each run points at a locked one.
 - `simulation_runs` added; the unique key is now `(run_id, question_id, respondent_id)` instead of `(question_id, respondent_id)`.
-- `questions.is_active`, `code`, `skip_logic_json` and a `numeric` type added.
+- `questions.is_active`, `code`, `skip_logic_json` and a `numeric` type added, plus review fields: `origin` (ai, ai_edited, human), `review_status`, `objective`, `rationale` and the AI's `original_json`.
+- Triggers: a run can only be inserted for an approved survey whose active questions are all accepted, and editing an approved survey's questions reopens it for review.
 - Answers stored as `answer_json`, with `answer_code` and `answer_value` copied out for fast charts.
 - Token, latency and error data moved to `llm_calls`.
 - Timestamps are ISO-8601 UTC text; JSON columns have `json_valid` checks; indexes cover the main queries.
@@ -209,8 +247,8 @@ The schema adds cohorts, surveys, runs and an LLM call log to the original draft
 | `projects` | Top-level container: title, research goal |
 | `cohorts` | A versioned set of respondents with its `CohortConfig`; locked before use |
 | `respondents` | One persona: demographics, quota cell, psychographics, full persona JSON, screen status |
-| `surveys` | Versioned survey per project |
-| `questions` | Ordered questions with type, options/scale JSON, skip logic, active flag |
+| `surveys` | Versioned survey per project, with brief, generator model and review status |
+| `questions` | Ordered questions with type, options/scale JSON, skip logic, active flag, and origin and review status |
 | `simulation_runs` | One execution: survey × cohort × model settings × prompt version × seed |
 | `llm_calls` | Every API call: purpose, attempt, status, tokens, latency, error, optional raw payloads |
 | `responses` | One answer per run × question × respondent, with shown option order and optional option probabilities |
@@ -232,7 +270,13 @@ These contracts are fixed first, so frontend and backend can be built in paralle
 | `update_respondent` | `respondent_id`, patch | `Respondent` (draft cohorts only) |
 | `lock_cohort` | `cohort_id` | `Cohort` |
 | `list_respondents` | `cohort_id`, page | `Page<Respondent>` |
-| `save_survey` | `project_id`, `SurveyDraft` | `Survey` (bumps `version`) |
+| `draft_survey` | `project_id`, `SurveyBrief` | `Survey` (status `in_review`, questions `pending`) |
+| `regenerate_question` | `question_id`, optional instruction | `Question` (`pending`) |
+| `add_generated_questions` | `survey_id`, objective, count, optional instruction | `Vec<Question>` (`pending`) |
+| `review_question` | `question_id`, `accept` \| `reject` \| `edit(patch)` | `Question` |
+| `dismiss_critic_flag` | `question_id`, flag id, reason | `QuestionIssue` |
+| `approve_survey` | `survey_id` | `Survey` (`approved`), or `AppError` naming the pending questions and open flags |
+| `save_survey` | `project_id`, `SurveyDraft` | `Survey` (bumps `version`; hand-written questions are saved as `accepted`) |
 | `critique_survey` | `survey_id` | `Vec<QuestionIssue>` |
 | `estimate_run` | `RunConfig` | `CostEstimate` |
 | `start_simulation` | `RunConfig`, `Channel<RunProgress>` | `RunId` |
@@ -308,7 +352,8 @@ The app has six screens reached from a left sidebar inside a project. Every scre
 | Projects | List with last run, cohort size, fidelity score | Create, duplicate, delete, open |
 | Cohort builder | Size, seed, population preset, quota editor (sliders that keep shares at 100%), screening text | Live preview of quota counts; Generate |
 | Cohort review | Persona cards, virtualised table, target-vs-actual quota table | Filter, edit, regenerate one, Lock cohort |
-| Survey editor | Ordered questions by type, option editor, Likert scale settings, skip logic, randomise toggle | Drag to reorder; Critique survey flags leading, double-barrelled or loaded questions |
+| Survey brief | Research goal, objectives, audience description, question count and type mix, include/avoid topics | Generate draft |
+| Survey review | Question cards with origin, objective, rationale and critic flags; objective coverage panel; progress (for example "14 of 20 reviewed") | Accept, edit, reject, regenerate with instruction, add question, reorder; Approve survey |
 | Run | Model settings, answer mode, concurrency, cost estimate; then live progress, tokens, cost, throttle and error log | Start, pause, resume, cancel |
 | Results | Per-question charts, cross-tabs, open-ended themes with example quotes, response grid, run comparison | Group by demographic, filter, export |
 
@@ -368,7 +413,7 @@ The build is split into five milestones. M1 fixes the contracts so frontend and 
 | --- | --- | --- |
 | M1 Skeleton | Tauri app, migrations, command stubs, generated TS bindings, keychain, settings, CI with size check | Installer builds under 15 MB; `test_connection` works for one provider |
 | M2 Cohorts | Quota sampler, persona enrichment, cohort review, lock | 100 personas match quotas exactly; same seed gives same demographics |
-| M3 Simulation | Survey editor, worker pool, rate limiter, retries, pause/resume/cancel, live progress | Acceptance tests below pass |
+| M3 Simulation | Survey drafting and review, worker pool, rate limiter, retries, pause/resume/cancel, live progress | Acceptance tests below pass |
 | M4 Analytics | Distributions, cross-tabs, theme coding, exports, comparison runs | CSV opens correctly in Excel; charts update live |
 | M5 Validity | Fidelity benchmark pack and report, option shuffling checks, disclosure, code signing | Fidelity report runs end to end on the default Gemini model |
 
@@ -395,6 +440,7 @@ The build is split into five milestones. M1 fixes the contracts so frontend and 
 - Memory budget is split: Rust process ≤ 50 MB, WebView2 renderer ≤ 100 MB.
 - Gemini is the only v1 provider and must work for every LLM feature, including eval judging.
 - The calibration pack is AI-generated with planted ground truth (§8).
+- Surveys are drafted by Gemini and every question is reviewed by a person before use (§4.1).
 - Release-tier performance and install tests run on Windows VMs.
 
 **Open questions**
@@ -405,3 +451,4 @@ The build is split into five milestones. M1 fixes the contracts so frontend and 
 - [ ] Which base populations are needed first: US only, or also UK and other markets?
 - [ ] Is the 1,000-respondent limit enough, or is 5,000+ needed?
 - [ ] Should `whole_survey` stay the default answer mode, or should `conversational` be the default?
+- [ ] Should approval need a second reviewer for surveys used in decisions, or is one reviewer enough?

@@ -41,7 +41,7 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
    - `LlmProvider` trait, so other providers stay possible after v1.
    - Gemini adapter on `generateContent`: structured output, usage and cached-token parsing, `RESOURCE_EXHAUSTED` handling (spec §5).
    - `test_connection`: lists available models and probes log-probability support.
-   - Model IDs as settings, with a Flash-tier default for answering and a Pro-tier default for critic, theme coding and judging.
+   - Model IDs as settings, with a Flash-tier default for personas and answering, and a Pro-tier default for survey drafting, critic, theme coding and judging.
 8. **Mock LLM server:** a `wiremock` harness with scripted, slow, 429 and malformed responses.
 9. **CI on `windows-latest`:**
    - `cargo fmt/clippy/test`
@@ -77,7 +77,7 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
 
 **Exit:** 100 personas are generated against a real API and match the quotas exactly, and the engine tests pass against the mock.
 
-## M3: Simulation engine (about 2 weeks; the core, so review it hardest)
+## M3: Survey drafting and simulation engine (about 2.5 weeks; the core, so review it hardest)
 
 **Rust track**
 
@@ -99,13 +99,20 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
 6. **Progress batching:** gather deltas and flush to the Channel every 250 ms or 50 answers.
 7. **Resume on launch:** runs left in `running` state move to `paused`, and the UI offers Resume.
 8. `estimate_run`, with a user-editable Gemini price table, and a check against the daily request quota (RPD) before the run starts.
+9. **`engine/survey_draft.rs`** (spec §4.1)
+   - `SurveyBrief` and `SurveyDraftOutput` structs; the output schema has no field for expected answers.
+   - Prompt `survey_draft.v1`: takes the brief only, never cohort or persona data.
+   - `draft_survey`, `regenerate_question`, `add_generated_questions`; the critic runs automatically on every new or regenerated question.
+   - `review_question`, `dismiss_critic_flag`, `approve_survey`, plus the database triggers from `schema.sql` that block runs on unapproved surveys.
+   - The answer prompt builder takes only intro, question text and options, so objective and rationale cannot leak into it.
 
 **UI track** (after step 3's types exist, which they do from M1)
 
-9. Survey editor: question types, the options/Likert/numeric editors, drag to reorder, skip-logic builder, and the `critique_survey` panel.
-10. Run screen: settings form, cost estimate, live progress, token and cost counters, and the throttle/error log. It also has pause, resume and cancel controls.
+10. Survey brief form: goal, objectives, audience, question count and type mix, include/avoid topics.
+11. Survey review screen: question cards showing origin, objective, rationale and critic flags; accept, edit, reject and regenerate-with-instruction; add or reorder questions; an objective coverage panel; an Approve button that stays disabled while questions are pending. The same editors (options, Likert, numeric, skip logic) are used for editing.
+12. Run screen: settings form, cost estimate, live progress, token and cost counters, and the throttle/error log. It also has pause, resume and cancel controls.
 
-**Exit:** all six acceptance tests in spec §11 pass, including the kill-and-relaunch test and the forced 30% 429 test against the mock.
+**Exit:** a survey can be drafted from a brief, reviewed and approved, and a run on an unapproved survey is refused. All six acceptance tests in spec §11 pass, including the kill-and-relaunch test and the forced 30% 429 test against the mock.
 
 ## M4: Analytics (about 1.5 weeks)
 
@@ -150,4 +157,4 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
 
 ## Estimate
 
-About 7 weeks for one full-time developer, or about 4.5 weeks with the two tracks running in parallel.
+About 7.5 weeks for one full-time developer, or about 5 weeks with the two tracks running in parallel. Survey drafting and review adds about 3 days to M3.

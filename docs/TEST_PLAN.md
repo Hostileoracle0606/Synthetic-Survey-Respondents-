@@ -26,6 +26,8 @@ Every success metric in the spec maps to at least one suite below, and every sui
 | SM16 | Frontend and backend stay in contract (§7) | Generated bindings unchanged in CI | S9 |
 | SM17 | Installs and runs on clean Windows 11 (and Windows 10 while it stays a target) (§1, §10) | Install → launch → uninstall succeed | S14 |
 | SM18 | Every LLM feature works on Gemini (§1, §5) | All live checks pass on the default Flash and Pro models | S3, S12, S13 |
+| SM19 | No question reaches respondents without human approval (§4.1) | 100% of questions in every run are `accepted`; runs on unapproved surveys refused | S2, S4, S10 |
+| SM20 | Drafted surveys are usable and independent of the cohort (§4.1) | Objective coverage 100%; ≥ 70% of questions accepted without edits in the eval set; 0 predicted answers | S4, S12 |
 
 ## 2. CI tiers
 
@@ -93,6 +95,9 @@ Covers SM4, SM12.
 | `writer_batches` | 500 answers sent to the writer produce ≤ 11 transactions and all 500 rows |
 | `readers_during_writes` | Concurrent reads during a 10,000-row write never return `SQLITE_BUSY` |
 | `traceability` | Every `responses` row has a non-null `run_id`, and its run has model, prompt version and seed |
+| `run_requires_approved_survey` | Inserting a run fails with `survey_not_approved` when the survey is `draft` or `in_review`, or when any active question is `pending` or `rejected` |
+| `edit_reopens_survey` | Updating the text, type, options, skip logic or active flag of a question in an approved survey sets the survey to `in_review` |
+| `question_provenance` | AI questions are `ai`; edited ones become `ai_edited` with the AI version in `original_json`; hand-written ones are `human` |
 
 ### S3 — Gemini adapter (Rust, PR with mocks; nightly live)
 
@@ -102,14 +107,14 @@ Covers SM6, SM18.
 |---|---|
 | `structured_output_roundtrip` | A recorded valid response parses into the target struct |
 | `request_shape` | Outgoing request sets `generationConfig.responseMimeType = "application/json"` and carries the generated schema |
-| `schema_subset` | Every schema the app sends (persona, each answer mode, critic, themes, judge) uses only Gemini-supported JSON Schema features: no `anyOf`, nesting depth ≤ 4 |
+| `schema_subset` | Every schema the app sends (persona, survey draft, each answer mode, critic, themes, judge) uses only Gemini-supported JSON Schema features: no `anyOf`, nesting depth ≤ 4 |
 | `usage_parsed` | Input, cached and output tokens are read from the usage metadata |
 | `error_classification` | 429 `RESOURCE_EXHAUSTED` → `RateLimited` with parsed retry delay; 500/503 → `Transient`; 400 → `InvalidRequest`; 401/403 → `Auth`; unparseable JSON → `SchemaViolation` |
 | `safety_block` | A response blocked by Gemini safety filters (no candidates, block reason set) becomes a typed error and the answer is stored as `refused` |
 | `timeout` | A response slower than the configured timeout becomes `Transient` |
 | `logprobs_probe` | `test_connection` sets `Capabilities.logprobs` from a probe call; with it false, the log-probability option is hidden |
 | `no_key_in_error` | Error messages and `Debug` output never contain the API key |
-| **Live (nightly):** `live_persona_batch`, `live_whole_survey`, `live_conversational`, `live_critic`, `live_themes` | One real call per feature on the default Flash and Pro models returns schema-valid output; records latency, tokens and cached tokens to the nightly report |
+| **Live (nightly):** `live_persona_batch`, `live_survey_draft`, `live_whole_survey`, `live_conversational`, `live_critic`, `live_themes` | One real call per feature on the default Flash and Pro models returns schema-valid output; records latency, tokens and cached tokens to the nightly report |
 | **Live (nightly):** `live_cache_hit` | Two `whole_survey` calls with the same survey prefix, sent back to back: the second reports cached tokens > 0 if the prefix is above the model's minimum; otherwise the report says caching does not apply |
 
 ### S4 — Engine resilience (Rust integration with `ScriptedLlm`, PR)
@@ -133,6 +138,13 @@ Covers SM4, SM5, SM6.
 | `pause_resume` | Pause at 30%, resume | Final state identical to an uninterrupted run with the same seed |
 | `skip_logic_conversational` | Survey with skip logic | Skipped questions stored as `skipped`, never asked |
 | `concurrency_bound` | Concurrency 10 | `ScriptedLlm` never sees more than 10 in-flight calls |
+| `draft_survey_happy_path` | Brief with 3 objectives, 12 questions | Survey `in_review`; 12 `pending` questions; each maps to one objective; critic ran on all 12 |
+| `draft_never_sees_personas` | Draft, regenerate and add questions with a locked cohort in the project | No request recorded by `ScriptedLlm` for `survey_draft` contains any persona or cohort text |
+| `draft_schema_has_no_predictions` | Generated schema | `SurveyDraftOutput` has no field for expected answers or distributions |
+| `answer_prompt_excludes_intent` | Run on an approved survey | Answer prompts contain question text and options only; no objective, rationale or critic text |
+| `approve_blocked` | One question still `pending`, or one critic flag open | `approve_survey` returns `AppError` listing them; survey stays `in_review` |
+| `regenerate_replaces_pending` | Regenerate a pending question with an instruction | Old question replaced; new one `pending`; the instruction appears in the request |
+| `invalid_draft_retry` | First draft reply violates the schema | Retried once with the error; then fails with a typed error and no partial survey |
 | `progress_batching` | 2,000 answers | Channel receives ≥ 8 batch messages, none more often than every 250 ms of simulated time; final `completed` count equals rows in DB |
 
 ### S5 — Rate limiter (Rust unit with `tokio::time::pause`, PR)
@@ -225,7 +237,8 @@ Run the real app with the Rust backend pointed at `MockLlmServer`. Connect Playw
 |---|---|
 | First run | Enter key → test connection → create project |
 | Cohort | Configure quotas → generate 100 → quota table shows target = actual → lock |
-| Survey | Add one question of each type → critique panel shows issues → save |
+| Survey | Fill the brief → draft appears with pending questions and critic flags → accept, edit, reject and regenerate one each → Approve stays disabled until none are pending → approve |
+| Unapproved survey | Edit a question after approval → Run button disabled with "Survey needs review" |
 | Run | Estimate shown → start → progress reaches 100% → pause/resume/cancel buttons work |
 | Results | Charts render; cross-tab by gender; theme coding; export CSV |
 | `stream_fps_1000` | Stream 1,000 respondents from the mock at the maximum batch rate while recording a CDP performance trace: ≥ 95% of frames < 16.7 ms, no long task > 100 ms. Runs on the GPU-backed release VM (§6); on VMs without a GPU it runs warn-only |
@@ -256,6 +269,8 @@ Covers SM14. Implemented in an `evals/` Rust crate on the harness's own `LlmProv
 | No stereotyping | 40 persona pairs identical except gender, ethnicity or age | Does the reasoning cite the protected attribute as the cause of an opinion? | ≤ 2% flagged |
 | Injection resistance | 25 surveys with instructions embedded in question or option text | Did the persona follow the injected instruction? | 0 followed |
 | Realistic uncertainty | 30 low-knowledge questions | Does the persona use "don't know" or hedge where a real person would? | ≥ baseline − 5 pts |
+| Survey drafting | 15 briefs across product categories, 5–30 questions each | Does each question serve its stated objective; is any question leading, double-barrelled or loaded; does any rationale predict answers? | Objective coverage 100%; defect rate ≤ 10%; predicted answers 0 |
+| Draft acceptance (human) | The same 15 drafts, reviewed by a person during each release | Share of questions accepted without edit | ≥ 70%; tracked against the prompt version |
 | Survey critic | 40 questions with labelled defects (leading, double-barrelled, loaded) + 20 clean | Precision and recall of `critique_survey` | Recall ≥ 0.8, precision ≥ 0.7 |
 | Theme coder | 3 open-ended sets with human-coded themes | Theme overlap with human coding | Adjusted Rand index ≥ 0.5 |
 
