@@ -232,8 +232,8 @@ mod default_tests {
                 .map(|g| g.key)
                 .collect()
         };
-        assert_eq!(keys(&["US"]), ["age", "region", "income"]);
-        assert_eq!(keys(&["CA"]), ["age", "income"]);
+        assert_eq!(keys(&["CA"]), ["age", "region", "income"]);
+        assert_eq!(keys(&["US"]), ["age", "income"]);
         assert_eq!(keys(&["US", "CA", "GB"]), ["country", "age", "income"]);
         for g in default_quotas(&["US".into(), "CA".into(), "GB".into()]) {
             assert_eq!(g.rows.iter().map(|r| r.percent).sum::<u32>(), 100);

@@ -1,0 +1,971 @@
+age_band,gender,region,income,occupation_group,weight
+18–29,Female,Atlantic,$50k–$100k,Management & professional,9258
+18–29,Female,Atlantic,$50k–$100k,Not in labour force,11704
+18–29,Female,Atlantic,$50k–$100k,Production & transport,592
+18–29,Female,Atlantic,$50k–$100k,Sales & office,4519
+18–29,Female,Atlantic,$50k–$100k,Service,19368
+18–29,Female,Atlantic,$50k–$100k,Trades & natural resources,444
+18–29,Female,Atlantic,$50k–$100k,Unemployed,7001
+18–29,Female,Atlantic,Over $100k,Management & professional,14112
+18–29,Female,Atlantic,Over $100k,Not in labour force,13556
+18–29,Female,Atlantic,Over $100k,Production & transport,1037
+18–29,Female,Atlantic,Over $100k,Sales & office,5925
+18–29,Female,Atlantic,Over $100k,Service,20703
+18–29,Female,Atlantic,Over $100k,Trades & natural resources,666
+18–29,Female,Atlantic,Over $100k,Unemployed,9334
+18–29,Female,Atlantic,Under $50k,Management & professional,2704
+18–29,Female,Atlantic,Under $50k,Not in labour force,9334
+18–29,Female,Atlantic,Under $50k,Production & transport,111
+18–29,Female,Atlantic,Under $50k,Sales & office,1592
+18–29,Female,Atlantic,Under $50k,Service,8703
+18–29,Female,Atlantic,Under $50k,Trades & natural resources,74
+18–29,Female,Atlantic,Under $50k,Unemployed,4483
+18–29,Female,British Columbia,$50k–$100k,Management & professional,20481
+18–29,Female,British Columbia,$50k–$100k,Not in labour force,21000
+18–29,Female,British Columbia,$50k–$100k,Production & transport,1889
+18–29,Female,British Columbia,$50k–$100k,Sales & office,12666
+18–29,Female,British Columbia,$50k–$100k,Service,32703
+18–29,Female,British Columbia,$50k–$100k,Trades & natural resources,1481
+18–29,Female,British Columbia,$50k–$100k,Unemployed,8333
+18–29,Female,British Columbia,Over $100k,Management & professional,41036
+18–29,Female,British Columbia,Over $100k,Not in labour force,39073
+18–29,Female,British Columbia,Over $100k,Production & transport,4518
+18–29,Female,British Columbia,Over $100k,Sales & office,23444
+18–29,Female,British Columbia,Over $100k,Service,66184
+18–29,Female,British Columbia,Over $100k,Trades & natural resources,2926
+18–29,Female,British Columbia,Over $100k,Unemployed,17222
+18–29,Female,British Columbia,Under $50k,Management & professional,9407
+18–29,Female,British Columbia,Under $50k,Not in labour force,17148
+18–29,Female,British Columbia,Under $50k,Production & transport,630
+18–29,Female,British Columbia,Under $50k,Sales & office,4111
+18–29,Female,British Columbia,Under $50k,Service,15592
+18–29,Female,British Columbia,Under $50k,Trades & natural resources,741
+18–29,Female,British Columbia,Under $50k,Unemployed,6592
+18–29,Female,Ontario,$50k–$100k,Management & professional,53557
+18–29,Female,Ontario,$50k–$100k,Not in labour force,74224
+18–29,Female,Ontario,$50k–$100k,Production & transport,7074
+18–29,Female,Ontario,$50k–$100k,Sales & office,25038
+18–29,Female,Ontario,$50k–$100k,Service,67779
+18–29,Female,Ontario,$50k–$100k,Trades & natural resources,3111
+18–29,Female,Ontario,$50k–$100k,Unemployed,44371
+18–29,Female,Ontario,Over $100k,Management & professional,146003
+18–29,Female,Ontario,Over $100k,Not in labour force,134151
+18–29,Female,Ontario,Over $100k,Production & transport,13297
+18–29,Female,Ontario,Over $100k,Sales & office,63520
+18–29,Female,Ontario,Over $100k,Service,164930
+18–29,Female,Ontario,Over $100k,Trades & natural resources,8111
+18–29,Female,Ontario,Over $100k,Unemployed,99743
+18–29,Female,Ontario,Under $50k,Management & professional,19593
+18–29,Female,Ontario,Under $50k,Not in labour force,52668
+18–29,Female,Ontario,Under $50k,Production & transport,2148
+18–29,Female,Ontario,Under $50k,Sales & office,10445
+18–29,Female,Ontario,Under $50k,Service,25075
+18–29,Female,Ontario,Under $50k,Trades & natural resources,1296
+18–29,Female,Ontario,Under $50k,Unemployed,21926
+18–29,Female,Prairies,$50k–$100k,Management & professional,22213
+18–29,Female,Prairies,$50k–$100k,Not in labour force,35616
+18–29,Female,Prairies,$50k–$100k,Production & transport,1666
+18–29,Female,Prairies,$50k–$100k,Sales & office,14476
+18–29,Female,Prairies,$50k–$100k,Service,44243
+18–29,Female,Prairies,$50k–$100k,Trades & natural resources,2592
+18–29,Female,Prairies,$50k–$100k,Unemployed,16548
+18–29,Female,Prairies,Over $100k,Management & professional,53791
+18–29,Female,Prairies,Over $100k,Not in labour force,49794
+18–29,Female,Prairies,Over $100k,Production & transport,4257
+18–29,Female,Prairies,Over $100k,Sales & office,27727
+18–29,Female,Prairies,Over $100k,Service,81409
+18–29,Female,Prairies,Over $100k,Trades & natural resources,5294
+18–29,Female,Prairies,Over $100k,Unemployed,30947
+18–29,Female,Prairies,Under $50k,Management & professional,7701
+18–29,Female,Prairies,Under $50k,Not in labour force,23326
+18–29,Female,Prairies,Under $50k,Production & transport,888
+18–29,Female,Prairies,Under $50k,Sales & office,5220
+18–29,Female,Prairies,Under $50k,Service,20770
+18–29,Female,Prairies,Under $50k,Trades & natural resources,963
+18–29,Female,Prairies,Under $50k,Unemployed,9181
+18–29,Female,Quebec,$50k–$100k,Management & professional,46350
+18–29,Female,Quebec,$50k–$100k,Not in labour force,35123
+18–29,Female,Quebec,$50k–$100k,Production & transport,3742
+18–29,Female,Quebec,$50k–$100k,Sales & office,22082
+18–29,Female,Quebec,$50k–$100k,Service,65060
+18–29,Female,Quebec,$50k–$100k,Trades & natural resources,2964
+18–29,Female,Quebec,$50k–$100k,Unemployed,13116
+18–29,Female,Quebec,Over $100k,Management & professional,72359
+18–29,Female,Quebec,Over $100k,Not in labour force,42830
+18–29,Female,Quebec,Over $100k,Production & transport,3705
+18–29,Female,Quebec,Over $100k,Sales & office,30900
+18–29,Female,Quebec,Over $100k,Service,94218
+18–29,Female,Quebec,Over $100k,Trades & natural resources,3223
+18–29,Female,Quebec,Over $100k,Unemployed,16673
+18–29,Female,Quebec,Under $50k,Management & professional,18710
+18–29,Female,Quebec,Under $50k,Not in labour force,27306
+18–29,Female,Quebec,Under $50k,Production & transport,2594
+18–29,Female,Quebec,Under $50k,Sales & office,9411
+18–29,Female,Quebec,Under $50k,Service,33790
+18–29,Female,Quebec,Under $50k,Trades & natural resources,1186
+18–29,Female,Quebec,Under $50k,Unemployed,10633
+18–29,Female,Territories,$50k–$100k,Management & professional,148
+18–29,Female,Territories,$50k–$100k,Not in labour force,887
+18–29,Female,Territories,$50k–$100k,Sales & office,185
+18–29,Female,Territories,$50k–$100k,Service,296
+18–29,Female,Territories,$50k–$100k,Unemployed,222
+18–29,Female,Territories,Over $100k,Management & professional,480
+18–29,Female,Territories,Over $100k,Not in labour force,1404
+18–29,Female,Territories,Over $100k,Production & transport,37
+18–29,Female,Territories,Over $100k,Sales & office,369
+18–29,Female,Territories,Over $100k,Service,776
+18–29,Female,Territories,Over $100k,Unemployed,702
+18–29,Female,Territories,Under $50k,Management & professional,111
+18–29,Female,Territories,Under $50k,Not in labour force,406
+18–29,Female,Territories,Under $50k,Service,148
+18–29,Female,Territories,Under $50k,Unemployed,37
+18–29,Male,Atlantic,$50k–$100k,Management & professional,8037
+18–29,Male,Atlantic,$50k–$100k,Not in labour force,9630
+18–29,Male,Atlantic,$50k–$100k,Production & transport,5370
+18–29,Male,Atlantic,$50k–$100k,Sales & office,1889
+18–29,Male,Atlantic,$50k–$100k,Service,12408
+18–29,Male,Atlantic,$50k–$100k,Trades & natural resources,8073
+18–29,Male,Atlantic,$50k–$100k,Unemployed,7518
+18–29,Male,Atlantic,Over $100k,Management & professional,9592
+18–29,Male,Atlantic,Over $100k,Not in labour force,14222
+18–29,Male,Atlantic,Over $100k,Production & transport,6035
+18–29,Male,Atlantic,Over $100k,Sales & office,2851
+18–29,Male,Atlantic,Over $100k,Service,15741
+18–29,Male,Atlantic,Over $100k,Trades & natural resources,11962
+18–29,Male,Atlantic,Over $100k,Unemployed,11815
+18–29,Male,Atlantic,Under $50k,Management & professional,3111
+18–29,Male,Atlantic,Under $50k,Not in labour force,7927
+18–29,Male,Atlantic,Under $50k,Production & transport,1926
+18–29,Male,Atlantic,Under $50k,Sales & office,1111
+18–29,Male,Atlantic,Under $50k,Service,6148
+18–29,Male,Atlantic,Under $50k,Trades & natural resources,2703
+18–29,Male,Atlantic,Under $50k,Unemployed,4260
+18–29,Male,British Columbia,$50k–$100k,Management & professional,19037
+18–29,Male,British Columbia,$50k–$100k,Not in labour force,19629
+18–29,Male,British Columbia,$50k–$100k,Production & transport,8926
+18–29,Male,British Columbia,$50k–$100k,Sales & office,5592
+18–29,Male,British Columbia,$50k–$100k,Service,20185
+18–29,Male,British Columbia,$50k–$100k,Trades & natural resources,14666
+18–29,Male,British Columbia,$50k–$100k,Unemployed,9963
+18–29,Male,British Columbia,Over $100k,Management & professional,35962
+18–29,Male,British Columbia,Over $100k,Not in labour force,40184
+18–29,Male,British Columbia,Over $100k,Production & transport,24444
+18–29,Male,British Columbia,Over $100k,Sales & office,11111
+18–29,Male,British Columbia,Over $100k,Service,44592
+18–29,Male,British Columbia,Over $100k,Trades & natural resources,36629
+18–29,Male,British Columbia,Over $100k,Unemployed,21037
+18–29,Male,British Columbia,Under $50k,Management & professional,7852
+18–29,Male,British Columbia,Under $50k,Not in labour force,17777
+18–29,Male,British Columbia,Under $50k,Production & transport,4222
+18–29,Male,British Columbia,Under $50k,Sales & office,2148
+18–29,Male,British Columbia,Under $50k,Service,8704
+18–29,Male,British Columbia,Under $50k,Trades & natural resources,4741
+18–29,Male,British Columbia,Under $50k,Unemployed,6407
+18–29,Male,Ontario,$50k–$100k,Management & professional,50371
+18–29,Male,Ontario,$50k–$100k,Not in labour force,69557
+18–29,Male,Ontario,$50k–$100k,Production & transport,25371
+18–29,Male,Ontario,$50k–$100k,Sales & office,13074
+18–29,Male,Ontario,$50k–$100k,Service,45445
+18–29,Male,Ontario,$50k–$100k,Trades & natural resources,33816
+18–29,Male,Ontario,$50k–$100k,Unemployed,40742
+18–29,Male,Ontario,Over $100k,Management & professional,135818
+18–29,Male,Ontario,Over $100k,Not in labour force,137818
+18–29,Male,Ontario,Over $100k,Production & transport,67076
+18–29,Male,Ontario,Over $100k,Sales & office,39890
+18–29,Male,Ontario,Over $100k,Service,123632
+18–29,Male,Ontario,Over $100k,Trades & natural resources,96447
+18–29,Male,Ontario,Over $100k,Unemployed,96372
+18–29,Male,Ontario,Under $50k,Management & professional,17111
+18–29,Male,Ontario,Under $50k,Not in labour force,48001
+18–29,Male,Ontario,Under $50k,Production & transport,9000
+18–29,Male,Ontario,Under $50k,Sales & office,5111
+18–29,Male,Ontario,Under $50k,Service,16741
+18–29,Male,Ontario,Under $50k,Trades & natural resources,8593
+18–29,Male,Ontario,Under $50k,Unemployed,20000
+18–29,Male,Prairies,$50k–$100k,Management & professional,21213
+18–29,Male,Prairies,$50k–$100k,Not in labour force,28693
+18–29,Male,Prairies,$50k–$100k,Production & transport,13291
+18–29,Male,Prairies,$50k–$100k,Sales & office,6961
+18–29,Male,Prairies,$50k–$100k,Service,25546
+18–29,Male,Prairies,$50k–$100k,Trades & natural resources,27878
+18–29,Male,Prairies,$50k–$100k,Unemployed,17511
+18–29,Male,Prairies,Over $100k,Management & professional,38870
+18–29,Male,Prairies,Over $100k,Not in labour force,50940
+18–29,Male,Prairies,Over $100k,Production & transport,27839
+18–29,Male,Prairies,Over $100k,Sales & office,13068
+18–29,Male,Prairies,Over $100k,Service,56790
+18–29,Male,Prairies,Over $100k,Trades & natural resources,56865
+18–29,Male,Prairies,Over $100k,Unemployed,36426
+18–29,Male,Prairies,Under $50k,Management & professional,7997
+18–29,Male,Prairies,Under $50k,Not in labour force,18104
+18–29,Male,Prairies,Under $50k,Production & transport,5294
+18–29,Male,Prairies,Under $50k,Sales & office,2332
+18–29,Male,Prairies,Under $50k,Service,12736
+18–29,Male,Prairies,Under $50k,Trades & natural resources,7479
+18–29,Male,Prairies,Under $50k,Unemployed,9330
+18–29,Male,Quebec,$50k–$100k,Management & professional,39607
+18–29,Male,Quebec,$50k–$100k,Not in labour force,31270
+18–29,Male,Quebec,$50k–$100k,Production & transport,16821
+18–29,Male,Quebec,$50k–$100k,Sales & office,10374
+18–29,Male,Quebec,$50k–$100k,Service,40385
+18–29,Male,Quebec,$50k–$100k,Trades & natural resources,32789
+18–29,Male,Quebec,$50k–$100k,Unemployed,14894
+18–29,Male,Quebec,Over $100k,Management & professional,49832
+18–29,Male,Quebec,Over $100k,Not in labour force,52648
+18–29,Male,Quebec,Over $100k,Production & transport,22193
+18–29,Male,Quebec,Over $100k,Sales & office,17043
+18–29,Male,Quebec,Over $100k,Service,69728
+18–29,Male,Quebec,Over $100k,Trades & natural resources,49573
+18–29,Male,Quebec,Over $100k,Unemployed,20118
+18–29,Male,Quebec,Under $50k,Management & professional,17673
+18–29,Male,Quebec,Under $50k,Not in labour force,27084
+18–29,Male,Quebec,Under $50k,Production & transport,8410
+18–29,Male,Quebec,Under $50k,Sales & office,5780
+18–29,Male,Quebec,Under $50k,Service,22786
+18–29,Male,Quebec,Under $50k,Trades & natural resources,11708
+18–29,Male,Quebec,Under $50k,Unemployed,12523
+18–29,Male,Territories,$50k–$100k,Management & professional,74
+18–29,Male,Territories,$50k–$100k,Not in labour force,665
+18–29,Male,Territories,$50k–$100k,Production & transport,74
+18–29,Male,Territories,$50k–$100k,Sales & office,37
+18–29,Male,Territories,$50k–$100k,Service,222
+18–29,Male,Territories,$50k–$100k,Trades & natural resources,37
+18–29,Male,Territories,$50k–$100k,Unemployed,148
+18–29,Male,Territories,Over $100k,Management & professional,222
+18–29,Male,Territories,Over $100k,Not in labour force,1921
+18–29,Male,Territories,Over $100k,Production & transport,296
+18–29,Male,Territories,Over $100k,Service,776
+18–29,Male,Territories,Over $100k,Trades & natural resources,554
+18–29,Male,Territories,Over $100k,Unemployed,628
+18–29,Male,Territories,Under $50k,Management & professional,37
+18–29,Male,Territories,Under $50k,Not in labour force,443
+18–29,Male,Territories,Under $50k,Production & transport,37
+18–29,Male,Territories,Under $50k,Trades & natural resources,37
+18–29,Male,Territories,Under $50k,Unemployed,74
+30–44,Female,Atlantic,$50k–$100k,Management & professional,17110
+30–44,Female,Atlantic,$50k–$100k,Not in labour force,13037
+30–44,Female,Atlantic,$50k–$100k,Production & transport,1334
+30–44,Female,Atlantic,$50k–$100k,Sales & office,9444
+30–44,Female,Atlantic,$50k–$100k,Service,22257
+30–44,Female,Atlantic,$50k–$100k,Trades & natural resources,593
+30–44,Female,Atlantic,$50k–$100k,Unemployed,7297
+30–44,Female,Atlantic,Over $100k,Management & professional,50443
+30–44,Female,Atlantic,Over $100k,Not in labour force,9778
+30–44,Female,Atlantic,Over $100k,Production & transport,1407
+30–44,Female,Atlantic,Over $100k,Sales & office,14405
+30–44,Female,Atlantic,Over $100k,Service,19110
+30–44,Female,Atlantic,Over $100k,Trades & natural resources,1037
+30–44,Female,Atlantic,Over $100k,Unemployed,6112
+30–44,Female,Atlantic,Under $50k,Management & professional,3111
+30–44,Female,Atlantic,Under $50k,Not in labour force,11037
+30–44,Female,Atlantic,Under $50k,Production & transport,481
+30–44,Female,Atlantic,Under $50k,Sales & office,3111
+30–44,Female,Atlantic,Under $50k,Service,8925
+30–44,Female,Atlantic,Under $50k,Trades & natural resources,259
+30–44,Female,Atlantic,Under $50k,Unemployed,4037
+30–44,Female,British Columbia,$50k–$100k,Management & professional,36555
+30–44,Female,British Columbia,$50k–$100k,Not in labour force,28814
+30–44,Female,British Columbia,$50k–$100k,Production & transport,3185
+30–44,Female,British Columbia,$50k–$100k,Sales & office,21296
+30–44,Female,British Columbia,$50k–$100k,Service,37221
+30–44,Female,British Columbia,$50k–$100k,Trades & natural resources,2296
+30–44,Female,British Columbia,$50k–$100k,Unemployed,10852
+30–44,Female,British Columbia,Over $100k,Management & professional,129849
+30–44,Female,British Columbia,Over $100k,Not in labour force,43036
+30–44,Female,British Columbia,Over $100k,Production & transport,6444
+30–44,Female,British Columbia,Over $100k,Sales & office,45444
+30–44,Female,British Columbia,Over $100k,Service,62888
+30–44,Female,British Columbia,Over $100k,Trades & natural resources,4704
+30–44,Female,British Columbia,Over $100k,Unemployed,14518
+30–44,Female,British Columbia,Under $50k,Management & professional,10778
+30–44,Female,British Columbia,Under $50k,Not in labour force,22037
+30–44,Female,British Columbia,Under $50k,Production & transport,1000
+30–44,Female,British Columbia,Under $50k,Sales & office,6667
+30–44,Female,British Columbia,Under $50k,Service,15815
+30–44,Female,British Columbia,Under $50k,Trades & natural resources,815
+30–44,Female,British Columbia,Under $50k,Unemployed,6741
+30–44,Female,Ontario,$50k–$100k,Management & professional,96891
+30–44,Female,Ontario,$50k–$100k,Not in labour force,106002
+30–44,Female,Ontario,$50k–$100k,Production & transport,13037
+30–44,Female,Ontario,$50k–$100k,Sales & office,49890
+30–44,Female,Ontario,$50k–$100k,Service,91261
+30–44,Female,Ontario,$50k–$100k,Trades & natural resources,4408
+30–44,Female,Ontario,$50k–$100k,Unemployed,47112
+30–44,Female,Ontario,Over $100k,Management & professional,391046
+30–44,Female,Ontario,Over $100k,Not in labour force,118558
+30–44,Female,Ontario,Over $100k,Production & transport,18334
+30–44,Female,Ontario,Over $100k,Sales & office,112817
+30–44,Female,Ontario,Over $100k,Service,143374
+30–44,Female,Ontario,Over $100k,Trades & natural resources,6408
+30–44,Female,Ontario,Over $100k,Unemployed,55742
+30–44,Female,Ontario,Under $50k,Management & professional,22963
+30–44,Female,Ontario,Under $50k,Not in labour force,59964
+30–44,Female,Ontario,Under $50k,Production & transport,2667
+30–44,Female,Ontario,Under $50k,Sales & office,12000
+30–44,Female,Ontario,Under $50k,Service,29482
+30–44,Female,Ontario,Under $50k,Trades & natural resources,1593
+30–44,Female,Ontario,Under $50k,Unemployed,24482
+30–44,Female,Prairies,$50k–$100k,Management & professional,43833
+30–44,Female,Prairies,$50k–$100k,Not in labour force,52274
+30–44,Female,Prairies,$50k–$100k,Production & transport,4849
+30–44,Female,Prairies,$50k–$100k,Sales & office,28544
+30–44,Female,Prairies,$50k–$100k,Service,55275
+30–44,Female,Prairies,$50k–$100k,Trades & natural resources,3184
+30–44,Female,Prairies,$50k–$100k,Unemployed,18695
+30–44,Female,Prairies,Over $100k,Management & professional,176626
+30–44,Female,Prairies,Over $100k,Not in labour force,61415
+30–44,Female,Prairies,Over $100k,Production & transport,7810
+30–44,Female,Prairies,Over $100k,Sales & office,64638
+30–44,Female,Prairies,Over $100k,Service,88553
+30–44,Female,Prairies,Over $100k,Trades & natural resources,6960
+30–44,Female,Prairies,Over $100k,Unemployed,25394
+30–44,Female,Prairies,Under $50k,Management & professional,10070
+30–44,Female,Prairies,Under $50k,Not in labour force,28397
+30–44,Female,Prairies,Under $50k,Production & transport,1222
+30–44,Female,Prairies,Under $50k,Sales & office,6183
+30–44,Female,Prairies,Under $50k,Service,18771
+30–44,Female,Prairies,Under $50k,Trades & natural resources,1185
+30–44,Female,Prairies,Under $50k,Unemployed,10366
+30–44,Female,Quebec,$50k–$100k,Management & professional,76990
+30–44,Female,Quebec,$50k–$100k,Not in labour force,47350
+30–44,Female,Quebec,$50k–$100k,Production & transport,7262
+30–44,Female,Quebec,$50k–$100k,Sales & office,38569
+30–44,Female,Quebec,$50k–$100k,Service,76360
+30–44,Female,Quebec,$50k–$100k,Trades & natural resources,4817
+30–44,Female,Quebec,$50k–$100k,Unemployed,17525
+30–44,Female,Quebec,Over $100k,Management & professional,232897
+30–44,Female,Quebec,Over $100k,Not in labour force,34605
+30–44,Female,Quebec,Over $100k,Production & transport,7595
+30–44,Female,Quebec,Over $100k,Sales & office,69172
+30–44,Female,Quebec,Over $100k,Service,89439
+30–44,Female,Quebec,Over $100k,Trades & natural resources,4261
+30–44,Female,Quebec,Over $100k,Unemployed,12782
+30–44,Female,Quebec,Under $50k,Management & professional,20415
+30–44,Female,Quebec,Under $50k,Not in labour force,32715
+30–44,Female,Quebec,Under $50k,Production & transport,2816
+30–44,Female,Quebec,Under $50k,Sales & office,10411
+30–44,Female,Quebec,Under $50k,Service,27751
+30–44,Female,Quebec,Under $50k,Trades & natural resources,1556
+30–44,Female,Quebec,Under $50k,Unemployed,10559
+30–44,Female,Territories,$50k–$100k,Management & professional,296
+30–44,Female,Territories,$50k–$100k,Not in labour force,850
+30–44,Female,Territories,$50k–$100k,Sales & office,185
+30–44,Female,Territories,$50k–$100k,Service,591
+30–44,Female,Territories,$50k–$100k,Trades & natural resources,37
+30–44,Female,Territories,$50k–$100k,Unemployed,222
+30–44,Female,Territories,Over $100k,Management & professional,2882
+30–44,Female,Territories,Over $100k,Not in labour force,1219
+30–44,Female,Territories,Over $100k,Sales & office,1589
+30–44,Female,Territories,Over $100k,Service,1256
+30–44,Female,Territories,Over $100k,Unemployed,296
+30–44,Female,Territories,Under $50k,Not in labour force,443
+30–44,Female,Territories,Under $50k,Sales & office,74
+30–44,Female,Territories,Under $50k,Service,148
+30–44,Female,Territories,Under $50k,Unemployed,74
+30–44,Male,Atlantic,$50k–$100k,Management & professional,14332
+30–44,Male,Atlantic,$50k–$100k,Not in labour force,9073
+30–44,Male,Atlantic,$50k–$100k,Production & transport,7037
+30–44,Male,Atlantic,$50k–$100k,Sales & office,3074
+30–44,Male,Atlantic,$50k–$100k,Service,10296
+30–44,Male,Atlantic,$50k–$100k,Trades & natural resources,14922
+30–44,Male,Atlantic,$50k–$100k,Unemployed,8001
+30–44,Male,Atlantic,Over $100k,Management & professional,40703
+30–44,Male,Atlantic,Over $100k,Not in labour force,6408
+30–44,Male,Atlantic,Over $100k,Production & transport,7665
+30–44,Male,Atlantic,Over $100k,Sales & office,4704
+30–44,Male,Atlantic,Over $100k,Service,13000
+30–44,Male,Atlantic,Over $100k,Trades & natural resources,22369
+30–44,Male,Atlantic,Over $100k,Unemployed,6038
+30–44,Male,Atlantic,Under $50k,Management & professional,3185
+30–44,Male,Atlantic,Under $50k,Not in labour force,7482
+30–44,Male,Atlantic,Under $50k,Production & transport,2074
+30–44,Male,Atlantic,Under $50k,Sales & office,630
+30–44,Male,Atlantic,Under $50k,Service,3704
+30–44,Male,Atlantic,Under $50k,Trades & natural resources,3926
+30–44,Male,Atlantic,Under $50k,Unemployed,4852
+30–44,Male,British Columbia,$50k–$100k,Management & professional,37925
+30–44,Male,British Columbia,$50k–$100k,Not in labour force,14296
+30–44,Male,British Columbia,$50k–$100k,Production & transport,13185
+30–44,Male,British Columbia,$50k–$100k,Sales & office,9222
+30–44,Male,British Columbia,$50k–$100k,Service,20037
+30–44,Male,British Columbia,$50k–$100k,Trades & natural resources,28333
+30–44,Male,British Columbia,$50k–$100k,Unemployed,10148
+30–44,Male,British Columbia,Over $100k,Management & professional,131220
+30–44,Male,British Columbia,Over $100k,Not in labour force,18185
+30–44,Male,British Columbia,Over $100k,Production & transport,26629
+30–44,Male,British Columbia,Over $100k,Sales & office,17000
+30–44,Male,British Columbia,Over $100k,Service,32110
+30–44,Male,British Columbia,Over $100k,Trades & natural resources,68628
+30–44,Male,British Columbia,Over $100k,Unemployed,11222
+30–44,Male,British Columbia,Under $50k,Management & professional,13259
+30–44,Male,British Columbia,Under $50k,Not in labour force,12629
+30–44,Male,British Columbia,Under $50k,Production & transport,4259
+30–44,Male,British Columbia,Under $50k,Sales & office,2704
+30–44,Male,British Columbia,Under $50k,Service,8148
+30–44,Male,British Columbia,Under $50k,Trades & natural resources,7667
+30–44,Male,British Columbia,Under $50k,Unemployed,7111
+30–44,Male,Ontario,$50k–$100k,Management & professional,105002
+30–44,Male,Ontario,$50k–$100k,Not in labour force,49705
+30–44,Male,Ontario,$50k–$100k,Production & transport,46483
+30–44,Male,Ontario,$50k–$100k,Sales & office,24482
+30–44,Male,Ontario,$50k–$100k,Service,40853
+30–44,Male,Ontario,$50k–$100k,Trades & natural resources,65853
+30–44,Male,Ontario,$50k–$100k,Unemployed,38149
+30–44,Male,Ontario,Over $100k,Management & professional,385268
+30–44,Male,Ontario,Over $100k,Not in labour force,51334
+30–44,Male,Ontario,Over $100k,Production & transport,76076
+30–44,Male,Ontario,Over $100k,Sales & office,50223
+30–44,Male,Ontario,Over $100k,Service,86187
+30–44,Male,Ontario,Over $100k,Trades & natural resources,141040
+30–44,Male,Ontario,Over $100k,Unemployed,40519
+30–44,Male,Ontario,Under $50k,Management & professional,28519
+30–44,Male,Ontario,Under $50k,Not in labour force,40149
+30–44,Male,Ontario,Under $50k,Production & transport,12148
+30–44,Male,Ontario,Under $50k,Sales & office,6556
+30–44,Male,Ontario,Under $50k,Service,15482
+30–44,Male,Ontario,Under $50k,Trades & natural resources,17074
+30–44,Male,Ontario,Under $50k,Unemployed,20741
+30–44,Male,Prairies,$50k–$100k,Management & professional,46685
+30–44,Male,Prairies,$50k–$100k,Not in labour force,21437
+30–44,Male,Prairies,$50k–$100k,Production & transport,22435
+30–44,Male,Prairies,$50k–$100k,Sales & office,12920
+30–44,Male,Prairies,$50k–$100k,Service,26396
+30–44,Male,Prairies,$50k–$100k,Trades & natural resources,49017
+30–44,Male,Prairies,$50k–$100k,Unemployed,19361
+30–44,Male,Prairies,Over $100k,Management & professional,170627
+30–44,Male,Prairies,Over $100k,Not in labour force,24285
+30–44,Male,Prairies,Over $100k,Production & transport,40686
+30–44,Male,Prairies,Over $100k,Sales & office,21989
+30–44,Male,Prairies,Over $100k,Service,44462
+30–44,Male,Prairies,Over $100k,Trades & natural resources,109472
+30–44,Male,Prairies,Over $100k,Unemployed,21619
+30–44,Male,Prairies,Under $50k,Management & professional,13069
+30–44,Male,Prairies,Under $50k,Not in labour force,15847
+30–44,Male,Prairies,Under $50k,Production & transport,6257
+30–44,Male,Prairies,Under $50k,Sales & office,3332
+30–44,Male,Prairies,Under $50k,Service,8627
+30–44,Male,Prairies,Under $50k,Trades & natural resources,10774
+30–44,Male,Prairies,Under $50k,Unemployed,10995
+30–44,Male,Quebec,$50k–$100k,Management & professional,81770
+30–44,Male,Quebec,$50k–$100k,Not in labour force,26602
+30–44,Male,Quebec,$50k–$100k,Production & transport,30863
+30–44,Male,Quebec,$50k–$100k,Sales & office,18896
+30–44,Male,Quebec,$50k–$100k,Service,37865
+30–44,Male,Quebec,$50k–$100k,Trades & natural resources,56575
+30–44,Male,Quebec,$50k–$100k,Unemployed,17302
+30–44,Male,Quebec,Over $100k,Management & professional,203146
+30–44,Male,Quebec,Over $100k,Not in labour force,14524
+30–44,Male,Quebec,Over $100k,Production & transport,33790
+30–44,Male,Quebec,Over $100k,Sales & office,26639
+30–44,Male,Quebec,Over $100k,Service,47869
+30–44,Male,Quebec,Over $100k,Trades & natural resources,90736
+30–44,Male,Quebec,Over $100k,Unemployed,11078
+30–44,Male,Quebec,Under $50k,Management & professional,23675
+30–44,Male,Quebec,Under $50k,Not in labour force,26194
+30–44,Male,Quebec,Under $50k,Production & transport,11856
+30–44,Male,Quebec,Under $50k,Sales & office,6706
+30–44,Male,Quebec,Under $50k,Service,17747
+30–44,Male,Quebec,Under $50k,Trades & natural resources,16969
+30–44,Male,Quebec,Under $50k,Unemployed,13857
+30–44,Male,Territories,$50k–$100k,Management & professional,185
+30–44,Male,Territories,$50k–$100k,Not in labour force,628
+30–44,Male,Territories,$50k–$100k,Production & transport,111
+30–44,Male,Territories,$50k–$100k,Sales & office,111
+30–44,Male,Territories,$50k–$100k,Service,74
+30–44,Male,Territories,$50k–$100k,Trades & natural resources,333
+30–44,Male,Territories,$50k–$100k,Unemployed,333
+30–44,Male,Territories,Over $100k,Management & professional,1847
+30–44,Male,Territories,Over $100k,Not in labour force,1404
+30–44,Male,Territories,Over $100k,Production & transport,222
+30–44,Male,Territories,Over $100k,Sales & office,222
+30–44,Male,Territories,Over $100k,Service,850
+30–44,Male,Territories,Over $100k,Trades & natural resources,1773
+30–44,Male,Territories,Over $100k,Unemployed,369
+30–44,Male,Territories,Under $50k,Not in labour force,333
+30–44,Male,Territories,Under $50k,Service,74
+30–44,Male,Territories,Under $50k,Trades & natural resources,111
+30–44,Male,Territories,Under $50k,Unemployed,111
+45–59,Female,Atlantic,$50k–$100k,Management & professional,12333
+45–59,Female,Atlantic,$50k–$100k,Not in labour force,21186
+45–59,Female,Atlantic,$50k–$100k,Production & transport,2371
+45–59,Female,Atlantic,$50k–$100k,Sales & office,11740
+45–59,Female,Atlantic,$50k–$100k,Service,23037
+45–59,Female,Atlantic,$50k–$100k,Trades & natural resources,1111
+45–59,Female,Atlantic,$50k–$100k,Unemployed,8186
+45–59,Female,Atlantic,Over $100k,Management & professional,50255
+45–59,Female,Atlantic,Over $100k,Not in labour force,19594
+45–59,Female,Atlantic,Over $100k,Production & transport,1852
+45–59,Female,Atlantic,Over $100k,Sales & office,23738
+45–59,Female,Atlantic,Over $100k,Service,24407
+45–59,Female,Atlantic,Over $100k,Trades & natural resources,1778
+45–59,Female,Atlantic,Over $100k,Unemployed,5741
+45–59,Female,Atlantic,Under $50k,Management & professional,2592
+45–59,Female,Atlantic,Under $50k,Not in labour force,21334
+45–59,Female,Atlantic,Under $50k,Production & transport,1037
+45–59,Female,Atlantic,Under $50k,Sales & office,3075
+45–59,Female,Atlantic,Under $50k,Service,9925
+45–59,Female,Atlantic,Under $50k,Trades & natural resources,296
+45–59,Female,Atlantic,Under $50k,Unemployed,3667
+45–59,Female,British Columbia,$50k–$100k,Management & professional,26444
+45–59,Female,British Columbia,$50k–$100k,Not in labour force,33592
+45–59,Female,British Columbia,$50k–$100k,Production & transport,3259
+45–59,Female,British Columbia,$50k–$100k,Sales & office,19000
+45–59,Female,British Columbia,$50k–$100k,Service,35036
+45–59,Female,British Columbia,$50k–$100k,Trades & natural resources,2222
+45–59,Female,British Columbia,$50k–$100k,Unemployed,9148
+45–59,Female,British Columbia,Over $100k,Management & professional,104702
+45–59,Female,British Columbia,Over $100k,Not in labour force,53036
+45–59,Female,British Columbia,Over $100k,Production & transport,7407
+45–59,Female,British Columbia,Over $100k,Sales & office,51110
+45–59,Female,British Columbia,Over $100k,Service,67851
+45–59,Female,British Columbia,Over $100k,Trades & natural resources,3889
+45–59,Female,British Columbia,Over $100k,Unemployed,12074
+45–59,Female,British Columbia,Under $50k,Management & professional,8370
+45–59,Female,British Columbia,Under $50k,Not in labour force,30073
+45–59,Female,British Columbia,Under $50k,Production & transport,1481
+45–59,Female,British Columbia,Under $50k,Sales & office,5444
+45–59,Female,British Columbia,Under $50k,Service,15555
+45–59,Female,British Columbia,Under $50k,Trades & natural resources,1111
+45–59,Female,British Columbia,Under $50k,Unemployed,6444
+45–59,Female,Ontario,$50k–$100k,Management & professional,59594
+45–59,Female,Ontario,$50k–$100k,Not in labour force,98002
+45–59,Female,Ontario,$50k–$100k,Production & transport,15889
+45–59,Female,Ontario,$50k–$100k,Sales & office,52297
+45–59,Female,Ontario,$50k–$100k,Service,81261
+45–59,Female,Ontario,$50k–$100k,Trades & natural resources,4852
+45–59,Female,Ontario,$50k–$100k,Unemployed,36593
+45–59,Female,Ontario,Over $100k,Management & professional,344119
+45–59,Female,Ontario,Over $100k,Not in labour force,156670
+45–59,Female,Ontario,Over $100k,Production & transport,33853
+45–59,Female,Ontario,Over $100k,Sales & office,148374
+45–59,Female,Ontario,Over $100k,Service,175485
+45–59,Female,Ontario,Over $100k,Trades & natural resources,8704
+45–59,Female,Ontario,Over $100k,Unemployed,57742
+45–59,Female,Ontario,Under $50k,Management & professional,15482
+45–59,Female,Ontario,Under $50k,Not in labour force,88335
+45–59,Female,Ontario,Under $50k,Production & transport,4148
+45–59,Female,Ontario,Under $50k,Sales & office,11111
+45–59,Female,Ontario,Under $50k,Service,32334
+45–59,Female,Ontario,Under $50k,Trades & natural resources,1741
+45–59,Female,Ontario,Under $50k,Unemployed,21519
+45–59,Female,Prairies,$50k–$100k,Management & professional,28173
+45–59,Female,Prairies,$50k–$100k,Not in labour force,35171
+45–59,Female,Prairies,$50k–$100k,Production & transport,3776
+45–59,Female,Prairies,$50k–$100k,Sales & office,25063
+45–59,Female,Prairies,$50k–$100k,Service,44575
+45–59,Female,Prairies,$50k–$100k,Trades & natural resources,2629
+45–59,Female,Prairies,$50k–$100k,Unemployed,11402
+45–59,Female,Prairies,Over $100k,Management & professional,132427
+45–59,Female,Prairies,Over $100k,Not in labour force,57974
+45–59,Female,Prairies,Over $100k,Production & transport,7959
+45–59,Female,Prairies,Over $100k,Sales & office,71600
+45–59,Female,Prairies,Over $100k,Service,83038
+45–59,Female,Prairies,Over $100k,Trades & natural resources,6072
+45–59,Female,Prairies,Over $100k,Unemployed,19730
+45–59,Female,Prairies,Under $50k,Management & professional,8590
+45–59,Female,Prairies,Under $50k,Not in labour force,33506
+45–59,Female,Prairies,Under $50k,Production & transport,814
+45–59,Female,Prairies,Under $50k,Sales & office,6294
+45–59,Female,Prairies,Under $50k,Service,17586
+45–59,Female,Prairies,Under $50k,Trades & natural resources,1444
+45–59,Female,Prairies,Under $50k,Unemployed,7811
+45–59,Female,Quebec,$50k–$100k,Management & professional,48017
+45–59,Female,Quebec,$50k–$100k,Not in labour force,52685
+45–59,Female,Quebec,$50k–$100k,Production & transport,9707
+45–59,Female,Quebec,$50k–$100k,Sales & office,43867
+45–59,Female,Quebec,$50k–$100k,Service,73359
+45–59,Female,Quebec,$50k–$100k,Trades & natural resources,4520
+45–59,Female,Quebec,$50k–$100k,Unemployed,13746
+45–59,Female,Quebec,Over $100k,Management & professional,180323
+45–59,Female,Quebec,Over $100k,Not in labour force,49981
+45–59,Female,Quebec,Over $100k,Production & transport,10745
+45–59,Female,Quebec,Over $100k,Sales & office,81399
+45–59,Female,Quebec,Over $100k,Service,95404
+45–59,Female,Quebec,Over $100k,Trades & natural resources,6039
+45–59,Female,Quebec,Over $100k,Unemployed,13412
+45–59,Female,Quebec,Under $50k,Management & professional,12375
+45–59,Female,Quebec,Under $50k,Not in labour force,53056
+45–59,Female,Quebec,Under $50k,Production & transport,4187
+45–59,Female,Quebec,Under $50k,Sales & office,13894
+45–59,Female,Quebec,Under $50k,Service,31196
+45–59,Female,Quebec,Under $50k,Trades & natural resources,1927
+45–59,Female,Quebec,Under $50k,Unemployed,9263
+45–59,Female,Territories,$50k–$100k,Management & professional,148
+45–59,Female,Territories,$50k–$100k,Not in labour force,924
+45–59,Female,Territories,$50k–$100k,Sales & office,185
+45–59,Female,Territories,$50k–$100k,Service,222
+45–59,Female,Territories,$50k–$100k,Trades & natural resources,37
+45–59,Female,Territories,$50k–$100k,Unemployed,37
+45–59,Female,Territories,Over $100k,Management & professional,2512
+45–59,Female,Territories,Over $100k,Not in labour force,1219
+45–59,Female,Territories,Over $100k,Production & transport,37
+45–59,Female,Territories,Over $100k,Sales & office,998
+45–59,Female,Territories,Over $100k,Service,702
+45–59,Female,Territories,Over $100k,Unemployed,148
+45–59,Female,Territories,Under $50k,Management & professional,148
+45–59,Female,Territories,Under $50k,Not in labour force,480
+45–59,Female,Territories,Under $50k,Sales & office,148
+45–59,Female,Territories,Under $50k,Service,185
+45–59,Female,Territories,Under $50k,Unemployed,111
+45–59,Male,Atlantic,$50k–$100k,Management & professional,9815
+45–59,Male,Atlantic,$50k–$100k,Not in labour force,15148
+45–59,Male,Atlantic,$50k–$100k,Production & transport,8371
+45–59,Male,Atlantic,$50k–$100k,Sales & office,2629
+45–59,Male,Atlantic,$50k–$100k,Service,7814
+45–59,Male,Atlantic,$50k–$100k,Trades & natural resources,17999
+45–59,Male,Atlantic,$50k–$100k,Unemployed,9667
+45–59,Male,Atlantic,Over $100k,Management & professional,46035
+45–59,Male,Atlantic,Over $100k,Not in labour force,11853
+45–59,Male,Atlantic,Over $100k,Production & transport,10147
+45–59,Male,Atlantic,Over $100k,Sales & office,6074
+45–59,Male,Atlantic,Over $100k,Service,13221
+45–59,Male,Atlantic,Over $100k,Trades & natural resources,29330
+45–59,Male,Atlantic,Over $100k,Unemployed,6519
+45–59,Male,Atlantic,Under $50k,Management & professional,2925
+45–59,Male,Atlantic,Under $50k,Not in labour force,15816
+45–59,Male,Atlantic,Under $50k,Production & transport,2630
+45–59,Male,Atlantic,Under $50k,Sales & office,741
+45–59,Male,Atlantic,Under $50k,Service,3407
+45–59,Male,Atlantic,Under $50k,Trades & natural resources,5369
+45–59,Male,Atlantic,Under $50k,Unemployed,6370
+45–59,Male,British Columbia,$50k–$100k,Management & professional,25333
+45–59,Male,British Columbia,$50k–$100k,Not in labour force,20777
+45–59,Male,British Columbia,$50k–$100k,Production & transport,11444
+45–59,Male,British Columbia,$50k–$100k,Sales & office,6074
+45–59,Male,British Columbia,$50k–$100k,Service,15444
+45–59,Male,British Columbia,$50k–$100k,Trades & natural resources,24518
+45–59,Male,British Columbia,$50k–$100k,Unemployed,8185
+45–59,Male,British Columbia,Over $100k,Management & professional,122775
+45–59,Male,British Columbia,Over $100k,Not in labour force,23740
+45–59,Male,British Columbia,Over $100k,Production & transport,25111
+45–59,Male,British Columbia,Over $100k,Sales & office,15074
+45–59,Male,British Columbia,Over $100k,Service,33370
+45–59,Male,British Columbia,Over $100k,Trades & natural resources,60999
+45–59,Male,British Columbia,Over $100k,Unemployed,10778
+45–59,Male,British Columbia,Under $50k,Management & professional,10148
+45–59,Male,British Columbia,Under $50k,Not in labour force,23444
+45–59,Male,British Columbia,Under $50k,Production & transport,3926
+45–59,Male,British Columbia,Under $50k,Sales & office,1778
+45–59,Male,British Columbia,Under $50k,Service,7407
+45–59,Male,British Columbia,Under $50k,Trades & natural resources,7926
+45–59,Male,British Columbia,Under $50k,Unemployed,6630
+45–59,Male,Ontario,$50k–$100k,Management & professional,60149
+45–59,Male,Ontario,$50k–$100k,Not in labour force,66705
+45–59,Male,Ontario,$50k–$100k,Production & transport,41631
+45–59,Male,Ontario,$50k–$100k,Sales & office,16926
+45–59,Male,Ontario,$50k–$100k,Service,33630
+45–59,Male,Ontario,$50k–$100k,Trades & natural resources,59853
+45–59,Male,Ontario,$50k–$100k,Unemployed,33408
+45–59,Male,Ontario,Over $100k,Management & professional,386342
+45–59,Male,Ontario,Over $100k,Not in labour force,79039
+45–59,Male,Ontario,Over $100k,Production & transport,88632
+45–59,Male,Ontario,Over $100k,Sales & office,50186
+45–59,Male,Ontario,Over $100k,Service,85965
+45–59,Male,Ontario,Over $100k,Trades & natural resources,152152
+45–59,Male,Ontario,Over $100k,Unemployed,42668
+45–59,Male,Ontario,Under $50k,Management & professional,22038
+45–59,Male,Ontario,Under $50k,Not in labour force,66520
+45–59,Male,Ontario,Under $50k,Production & transport,13371
+45–59,Male,Ontario,Under $50k,Sales & office,3815
+45–59,Male,Ontario,Under $50k,Service,14111
+45–59,Male,Ontario,Under $50k,Trades & natural resources,18149
+45–59,Male,Ontario,Under $50k,Unemployed,19778
+45–59,Male,Prairies,$50k–$100k,Management & professional,29472
+45–59,Male,Prairies,$50k–$100k,Not in labour force,25323
+45–59,Male,Prairies,$50k–$100k,Production & transport,16178
+45–59,Male,Prairies,$50k–$100k,Sales & office,7478
+45–59,Male,Prairies,$50k–$100k,Service,16549
+45–59,Male,Prairies,$50k–$100k,Trades & natural resources,33542
+45–59,Male,Prairies,$50k–$100k,Unemployed,14808
+45–59,Male,Prairies,Over $100k,Management & professional,155302
+45–59,Male,Prairies,Over $100k,Not in labour force,30135
+45–59,Male,Prairies,Over $100k,Production & transport,36613
+45–59,Male,Prairies,Over $100k,Sales & office,21878
+45–59,Male,Prairies,Over $100k,Service,37355
+45–59,Male,Prairies,Over $100k,Trades & natural resources,86111
+45–59,Male,Prairies,Over $100k,Unemployed,19286
+45–59,Male,Prairies,Under $50k,Management & professional,11107
+45–59,Male,Prairies,Under $50k,Not in labour force,26658
+45–59,Male,Prairies,Under $50k,Production & transport,5257
+45–59,Male,Prairies,Under $50k,Sales & office,1925
+45–59,Male,Prairies,Under $50k,Service,6442
+45–59,Male,Prairies,Under $50k,Trades & natural resources,11329
+45–59,Male,Prairies,Under $50k,Unemployed,10736
+45–59,Male,Quebec,$50k–$100k,Management & professional,50351
+45–59,Male,Quebec,$50k–$100k,Not in labour force,35161
+45–59,Male,Quebec,$50k–$100k,Production & transport,30715
+45–59,Male,Quebec,$50k–$100k,Sales & office,15969
+45–59,Male,Quebec,$50k–$100k,Service,33234
+45–59,Male,Quebec,$50k–$100k,Trades & natural resources,52537
+45–59,Male,Quebec,$50k–$100k,Unemployed,15783
+45–59,Male,Quebec,Over $100k,Management & professional,202368
+45–59,Male,Quebec,Over $100k,Not in labour force,28380
+45–59,Male,Quebec,Over $100k,Production & transport,40792
+45–59,Male,Quebec,Over $100k,Sales & office,30529
+45–59,Male,Quebec,Over $100k,Service,49314
+45–59,Male,Quebec,Over $100k,Trades & natural resources,87068
+45–59,Male,Quebec,Over $100k,Unemployed,11597
+45–59,Male,Quebec,Under $50k,Management & professional,16413
+45–59,Male,Quebec,Under $50k,Not in labour force,45460
+45–59,Male,Quebec,Under $50k,Production & transport,11671
+45–59,Male,Quebec,Under $50k,Sales & office,6187
+45–59,Male,Quebec,Under $50k,Service,18006
+45–59,Male,Quebec,Under $50k,Trades & natural resources,17043
+45–59,Male,Quebec,Under $50k,Unemployed,12968
+45–59,Male,Territories,$50k–$100k,Management & professional,148
+45–59,Male,Territories,$50k–$100k,Not in labour force,333
+45–59,Male,Territories,$50k–$100k,Production & transport,111
+45–59,Male,Territories,$50k–$100k,Service,148
+45–59,Male,Territories,$50k–$100k,Trades & natural resources,259
+45–59,Male,Territories,$50k–$100k,Unemployed,111
+45–59,Male,Territories,Over $100k,Management & professional,2180
+45–59,Male,Territories,Over $100k,Not in labour force,887
+45–59,Male,Territories,Over $100k,Production & transport,111
+45–59,Male,Territories,Over $100k,Sales & office,185
+45–59,Male,Territories,Over $100k,Service,480
+45–59,Male,Territories,Over $100k,Trades & natural resources,1663
+45–59,Male,Territories,Over $100k,Unemployed,369
+45–59,Male,Territories,Under $50k,Management & professional,74
+45–59,Male,Territories,Under $50k,Not in labour force,406
+45–59,Male,Territories,Under $50k,Production & transport,37
+45–59,Male,Territories,Under $50k,Service,74
+45–59,Male,Territories,Under $50k,Trades & natural resources,74
+45–59,Male,Territories,Under $50k,Unemployed,185
+60+,Female,Atlantic,$50k–$100k,Management & professional,4518
+60+,Female,Atlantic,$50k–$100k,Not in labour force,107367
+60+,Female,Atlantic,$50k–$100k,Production & transport,889
+60+,Female,Atlantic,$50k–$100k,Sales & office,6259
+60+,Female,Atlantic,$50k–$100k,Service,11184
+60+,Female,Atlantic,$50k–$100k,Trades & natural resources,741
+60+,Female,Atlantic,$50k–$100k,Unemployed,4889
+60+,Female,Atlantic,Over $100k,Management & professional,8888
+60+,Female,Atlantic,Over $100k,Not in labour force,54148
+60+,Female,Atlantic,Over $100k,Production & transport,703
+60+,Female,Atlantic,Over $100k,Sales & office,6814
+60+,Female,Atlantic,Over $100k,Service,6518
+60+,Female,Atlantic,Over $100k,Trades & natural resources,333
+60+,Female,Atlantic,Over $100k,Unemployed,2185
+60+,Female,Atlantic,Under $50k,Management & professional,1481
+60+,Female,Atlantic,Under $50k,Not in labour force,137253
+60+,Female,Atlantic,Under $50k,Production & transport,444
+60+,Female,Atlantic,Under $50k,Sales & office,1704
+60+,Female,Atlantic,Under $50k,Service,5444
+60+,Female,Atlantic,Under $50k,Trades & natural resources,259
+60+,Female,Atlantic,Under $50k,Unemployed,2741
+60+,Female,British Columbia,$50k–$100k,Management & professional,11963
+60+,Female,British Columbia,$50k–$100k,Not in labour force,184552
+60+,Female,British Columbia,$50k–$100k,Production & transport,1370
+60+,Female,British Columbia,$50k–$100k,Sales & office,12629
+60+,Female,British Columbia,$50k–$100k,Service,20222
+60+,Female,British Columbia,$50k–$100k,Trades & natural resources,778
+60+,Female,British Columbia,$50k–$100k,Unemployed,4593
+60+,Female,British Columbia,Over $100k,Management & professional,29036
+60+,Female,British Columbia,Over $100k,Not in labour force,166145
+60+,Female,British Columbia,Over $100k,Production & transport,2259
+60+,Female,British Columbia,Over $100k,Sales & office,19963
+60+,Female,British Columbia,Over $100k,Service,22000
+60+,Female,British Columbia,Over $100k,Trades & natural resources,1481
+60+,Female,British Columbia,Over $100k,Unemployed,5778
+60+,Female,British Columbia,Under $50k,Management & professional,5407
+60+,Female,British Columbia,Under $50k,Not in labour force,182885
+60+,Female,British Columbia,Under $50k,Production & transport,481
+60+,Female,British Columbia,Under $50k,Sales & office,4185
+60+,Female,British Columbia,Under $50k,Service,9926
+60+,Female,British Columbia,Under $50k,Trades & natural resources,741
+60+,Female,British Columbia,Under $50k,Unemployed,3778
+60+,Female,Ontario,$50k–$100k,Management & professional,26667
+60+,Female,Ontario,$50k–$100k,Not in labour force,498900
+60+,Female,Ontario,$50k–$100k,Production & transport,5741
+60+,Female,Ontario,$50k–$100k,Sales & office,31816
+60+,Female,Ontario,$50k–$100k,Service,41927
+60+,Female,Ontario,$50k–$100k,Trades & natural resources,2593
+60+,Female,Ontario,$50k–$100k,Unemployed,21408
+60+,Female,Ontario,Over $100k,Management & professional,76372
+60+,Female,Ontario,Over $100k,Not in labour force,476899
+60+,Female,Ontario,Over $100k,Production & transport,8815
+60+,Female,Ontario,Over $100k,Sales & office,52631
+60+,Female,Ontario,Over $100k,Service,52557
+60+,Female,Ontario,Over $100k,Trades & natural resources,2778
+60+,Female,Ontario,Over $100k,Unemployed,20704
+60+,Female,Ontario,Under $50k,Management & professional,9408
+60+,Female,Ontario,Under $50k,Not in labour force,453936
+60+,Female,Ontario,Under $50k,Production & transport,2482
+60+,Female,Ontario,Under $50k,Sales & office,8519
+60+,Female,Ontario,Under $50k,Service,19445
+60+,Female,Ontario,Under $50k,Trades & natural resources,852
+60+,Female,Ontario,Under $50k,Unemployed,11963
+60+,Female,Prairies,$50k–$100k,Management & professional,13848
+60+,Female,Prairies,$50k–$100k,Not in labour force,190483
+60+,Female,Prairies,$50k–$100k,Production & transport,1629
+60+,Female,Prairies,$50k–$100k,Sales & office,16401
+60+,Female,Prairies,$50k–$100k,Service,21770
+60+,Female,Prairies,$50k–$100k,Trades & natural resources,2296
+60+,Female,Prairies,$50k–$100k,Unemployed,5849
+60+,Female,Prairies,Over $100k,Management & professional,33134
+60+,Female,Prairies,Over $100k,Not in labour force,150379
+60+,Female,Prairies,Over $100k,Production & transport,1740
+60+,Female,Prairies,Over $100k,Sales & office,23508
+60+,Female,Prairies,Over $100k,Service,21657
+60+,Female,Prairies,Over $100k,Trades & natural resources,2036
+60+,Female,Prairies,Over $100k,Unemployed,6478
+60+,Female,Prairies,Under $50k,Management & professional,6258
+60+,Female,Prairies,Under $50k,Not in labour force,186161
+60+,Female,Prairies,Under $50k,Production & transport,555
+60+,Female,Prairies,Under $50k,Sales & office,4554
+60+,Female,Prairies,Under $50k,Service,10625
+60+,Female,Prairies,Under $50k,Trades & natural resources,1333
+60+,Female,Prairies,Under $50k,Unemployed,4072
+60+,Female,Quebec,$50k–$100k,Management & professional,16673
+60+,Female,Quebec,$50k–$100k,Not in labour force,330450
+60+,Female,Quebec,$50k–$100k,Production & transport,3890
+60+,Female,Quebec,$50k–$100k,Sales & office,21119
+60+,Female,Quebec,$50k–$100k,Service,34679
+60+,Female,Quebec,$50k–$100k,Trades & natural resources,2408
+60+,Female,Quebec,$50k–$100k,Unemployed,13375
+60+,Female,Quebec,Over $100k,Management & professional,30529
+60+,Female,Quebec,Over $100k,Not in labour force,162465
+60+,Female,Quebec,Over $100k,Production & transport,2482
+60+,Female,Quebec,Over $100k,Sales & office,22971
+60+,Female,Quebec,Over $100k,Service,20452
+60+,Female,Quebec,Over $100k,Trades & natural resources,1112
+60+,Female,Quebec,Over $100k,Unemployed,6780
+60+,Female,Quebec,Under $50k,Management & professional,5928
+60+,Female,Quebec,Under $50k,Not in labour force,424779
+60+,Female,Quebec,Under $50k,Production & transport,1927
+60+,Female,Quebec,Under $50k,Sales & office,9151
+60+,Female,Quebec,Under $50k,Service,22638
+60+,Female,Quebec,Under $50k,Trades & natural resources,1334
+60+,Female,Quebec,Under $50k,Unemployed,12412
+60+,Female,Territories,$50k–$100k,Management & professional,74
+60+,Female,Territories,$50k–$100k,Not in labour force,998
+60+,Female,Territories,$50k–$100k,Sales & office,37
+60+,Female,Territories,$50k–$100k,Service,74
+60+,Female,Territories,Over $100k,Management & professional,813
+60+,Female,Territories,Over $100k,Not in labour force,1700
+60+,Female,Territories,Over $100k,Sales & office,333
+60+,Female,Territories,Over $100k,Service,406
+60+,Female,Territories,Over $100k,Unemployed,148
+60+,Female,Territories,Under $50k,Not in labour force,1293
+60+,Female,Territories,Under $50k,Sales & office,37
+60+,Male,Atlantic,$50k–$100k,Management & professional,5629
+60+,Male,Atlantic,$50k–$100k,Not in labour force,95219
+60+,Male,Atlantic,$50k–$100k,Production & transport,4370
+60+,Male,Atlantic,$50k–$100k,Sales & office,1630
+60+,Male,Atlantic,$50k–$100k,Service,5851
+60+,Male,Atlantic,$50k–$100k,Trades & natural resources,9888
+60+,Male,Atlantic,$50k–$100k,Unemployed,7592
+60+,Male,Atlantic,Over $100k,Management & professional,15925
+60+,Male,Atlantic,Over $100k,Not in labour force,44851
+60+,Male,Atlantic,Over $100k,Production & transport,3185
+60+,Male,Atlantic,Over $100k,Sales & office,1852
+60+,Male,Atlantic,Over $100k,Service,4074
+60+,Male,Atlantic,Over $100k,Trades & natural resources,10074
+60+,Male,Atlantic,Over $100k,Unemployed,5777
+60+,Male,Atlantic,Under $50k,Management & professional,2185
+60+,Male,Atlantic,Under $50k,Not in labour force,97776
+60+,Male,Atlantic,Under $50k,Production & transport,1482
+60+,Male,Atlantic,Under $50k,Sales & office,259
+60+,Male,Atlantic,Under $50k,Service,1370
+60+,Male,Atlantic,Under $50k,Trades & natural resources,3555
+60+,Male,Atlantic,Under $50k,Unemployed,3407
+60+,Male,British Columbia,$50k–$100k,Management & professional,15074
+60+,Male,British Columbia,$50k–$100k,Not in labour force,156145
+60+,Male,British Columbia,$50k–$100k,Production & transport,5000
+60+,Male,British Columbia,$50k–$100k,Sales & office,3593
+60+,Male,British Columbia,$50k–$100k,Service,10852
+60+,Male,British Columbia,$50k–$100k,Trades & natural resources,14407
+60+,Male,British Columbia,$50k–$100k,Unemployed,6592
+60+,Male,British Columbia,Over $100k,Management & professional,50592
+60+,Male,British Columbia,Over $100k,Not in labour force,137071
+60+,Male,British Columbia,Over $100k,Production & transport,9407
+60+,Male,British Columbia,Over $100k,Sales & office,6741
+60+,Male,British Columbia,Over $100k,Service,14926
+60+,Male,British Columbia,Over $100k,Trades & natural resources,25111
+60+,Male,British Columbia,Over $100k,Unemployed,6926
+60+,Male,British Columbia,Under $50k,Management & professional,5778
+60+,Male,British Columbia,Under $50k,Not in labour force,124331
+60+,Male,British Columbia,Under $50k,Production & transport,2185
+60+,Male,British Columbia,Under $50k,Sales & office,1296
+60+,Male,British Columbia,Under $50k,Service,4741
+60+,Male,British Columbia,Under $50k,Trades & natural resources,5148
+60+,Male,British Columbia,Under $50k,Unemployed,4518
+60+,Male,Ontario,$50k–$100k,Management & professional,37705
+60+,Male,Ontario,$50k–$100k,Not in labour force,410453
+60+,Male,Ontario,$50k–$100k,Production & transport,19408
+60+,Male,Ontario,$50k–$100k,Sales & office,8334
+60+,Male,Ontario,$50k–$100k,Service,20704
+60+,Male,Ontario,$50k–$100k,Trades & natural resources,34223
+60+,Male,Ontario,$50k–$100k,Unemployed,24112
+60+,Male,Ontario,Over $100k,Management & professional,144003
+60+,Male,Ontario,Over $100k,Not in labour force,390083
+60+,Male,Ontario,Over $100k,Production & transport,30001
+60+,Male,Ontario,Over $100k,Sales & office,19519
+60+,Male,Ontario,Over $100k,Service,35260
+60+,Male,Ontario,Over $100k,Trades & natural resources,54112
+60+,Male,Ontario,Over $100k,Unemployed,25667
+60+,Male,Ontario,Under $50k,Management & professional,14593
+60+,Male,Ontario,Under $50k,Not in labour force,284340
+60+,Male,Ontario,Under $50k,Production & transport,6148
+60+,Male,Ontario,Under $50k,Sales & office,2259
+60+,Male,Ontario,Under $50k,Service,8296
+60+,Male,Ontario,Under $50k,Trades & natural resources,10556
+60+,Male,Ontario,Under $50k,Unemployed,12297
+60+,Male,Prairies,$50k–$100k,Management & professional,20697
+60+,Male,Prairies,$50k–$100k,Not in labour force,161532
+60+,Male,Prairies,$50k–$100k,Production & transport,6405
+60+,Male,Prairies,$50k–$100k,Sales & office,3739
+60+,Male,Prairies,$50k–$100k,Service,10589
+60+,Male,Prairies,$50k–$100k,Trades & natural resources,20216
+60+,Male,Prairies,$50k–$100k,Unemployed,10143
+60+,Male,Prairies,Over $100k,Management & professional,57977
+60+,Male,Prairies,Over $100k,Not in labour force,129462
+60+,Male,Prairies,Over $100k,Production & transport,10513
+60+,Male,Prairies,Over $100k,Sales & office,8034
+60+,Male,Prairies,Over $100k,Service,14587
+60+,Male,Prairies,Over $100k,Trades & natural resources,31764
+60+,Male,Prairies,Over $100k,Unemployed,10624
+60+,Male,Prairies,Under $50k,Management & professional,12145
+60+,Male,Prairies,Under $50k,Not in labour force,119700
+60+,Male,Prairies,Under $50k,Production & transport,2480
+60+,Male,Prairies,Under $50k,Sales & office,1222
+60+,Male,Prairies,Under $50k,Service,3998
+60+,Male,Prairies,Under $50k,Trades & natural resources,6590
+60+,Male,Prairies,Under $50k,Unemployed,5072
+60+,Male,Quebec,$50k–$100k,Management & professional,25565
+60+,Male,Quebec,$50k–$100k,Not in labour force,292621
+60+,Male,Quebec,$50k–$100k,Production & transport,14820
+60+,Male,Quebec,$50k–$100k,Sales & office,7855
+60+,Male,Quebec,$50k–$100k,Service,21674
+60+,Male,Quebec,$50k–$100k,Trades & natural resources,30900
+60+,Male,Quebec,$50k–$100k,Unemployed,15561
+60+,Male,Quebec,Over $100k,Management & professional,60355
+60+,Male,Quebec,Over $100k,Not in labour force,149127
+60+,Male,Quebec,Over $100k,Production & transport,13079
+60+,Male,Quebec,Over $100k,Sales & office,10411
+60+,Male,Quebec,Over $100k,Service,18006
+60+,Male,Quebec,Over $100k,Trades & natural resources,27862
+60+,Male,Quebec,Over $100k,Unemployed,10930
+60+,Male,Quebec,Under $50k,Management & professional,10633
+60+,Male,Quebec,Under $50k,Not in labour force,296660
+60+,Male,Quebec,Under $50k,Production & transport,5743
+60+,Male,Quebec,Under $50k,Sales & office,2519
+60+,Male,Quebec,Under $50k,Service,11041
+60+,Male,Quebec,Under $50k,Trades & natural resources,10670
+60+,Male,Quebec,Under $50k,Unemployed,11893
+60+,Male,Territories,$50k–$100k,Management & professional,74
+60+,Male,Territories,$50k–$100k,Not in labour force,1404
+60+,Male,Territories,$50k–$100k,Service,74
+60+,Male,Territories,$50k–$100k,Trades & natural resources,148
+60+,Male,Territories,$50k–$100k,Unemployed,74
+60+,Male,Territories,Over $100k,Management & professional,665
+60+,Male,Territories,Over $100k,Not in labour force,1663
+60+,Male,Territories,Over $100k,Production & transport,74
+60+,Male,Territories,Over $100k,Sales & office,37
+60+,Male,Territories,Over $100k,Service,111
+60+,Male,Territories,Over $100k,Trades & natural resources,480
+60+,Male,Territories,Over $100k,Unemployed,148
+60+,Male,Territories,Under $50k,Management & professional,37
+60+,Male,Territories,Under $50k,Not in labour force,1145
+60+,Male,Territories,Under $50k,Service,74
+60+,Male,Territories,Under $50k,Trades & natural resources,37
+60+,Male,Territories,Under $50k,Unemployed,74

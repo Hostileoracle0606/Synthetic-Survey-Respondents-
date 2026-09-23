@@ -37,7 +37,7 @@ CREATE TABLE respondents (
     occupation            TEXT,
     income_bracket        TEXT,
     location              TEXT,
-    country               TEXT NOT NULL DEFAULT 'US',  -- ISO code; one of the project's countries
+    country               TEXT NOT NULL DEFAULT 'CA',  -- ISO code; one of the project's countries
     psychographic_summary TEXT NOT NULL,
     persona_json          TEXT NOT NULL CHECK (json_valid(persona_json)),  -- full enrichment incl. biases
     category_profile_json TEXT CHECK (category_profile_json IS NULL OR json_valid(category_profile_json)),

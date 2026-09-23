@@ -352,11 +352,11 @@ pub fn reply_for_ordinals(ordinals: &[u32], category: Option<&str>, fail_screen:
         .iter()
         .map(|&o| Skeleton {
             ordinal: o,
-            country: "US".into(),
+            country: "CA".into(),
             age: 40,
             age_band: "30–44".into(),
             gender: "Female".into(),
-            region: "South".into(),
+            region: "Ontario".into(),
             income: "$50k–$100k".into(),
             occupation: "Service".into(),
             quota_cell: String::new(),
@@ -405,7 +405,7 @@ mod tests {
             }],
             screening: String::new(),
         };
-        Sampler::new(&cfg, &["US".into()]).unwrap().draw().unwrap()
+        Sampler::new(&cfg, &["CA".into()]).unwrap().draw().unwrap()
     }
 
     /// Gemini supports a subset of JSON Schema: no anyOf/oneOf/allOf/$ref, and schemas that

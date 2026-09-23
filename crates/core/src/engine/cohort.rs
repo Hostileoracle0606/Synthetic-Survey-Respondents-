@@ -398,7 +398,7 @@ mod tests {
     fn job(e: &Env) -> CohortJob {
         CohortJob {
             cohort_id: e.cohort_id,
-            countries: vec!["US".into()],
+            countries: vec!["CA".into()],
             category: Some("mobile_phone".into()),
             config: e.config.clone(),
             model: "test-flash".into(),

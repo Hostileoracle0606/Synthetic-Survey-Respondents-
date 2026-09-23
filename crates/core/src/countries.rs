@@ -43,6 +43,6 @@ mod tests {
                 c.code
             );
         }
-        assert!(find("US").unwrap().has_census_table);
+        assert!(find("CA").unwrap().has_census_table);
     }
 }

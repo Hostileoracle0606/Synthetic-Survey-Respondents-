@@ -67,7 +67,7 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 **Rust track**
 
 0. `ScriptedLlm`: in-process fake provider for engine tests (test plan §3), moved from M1.
-1. `tools/build-populations` (offline Python, never shipped): US census microdata → joint table of age band × gender × region × income × occupation group, under 1 MB, in `crates/core/data/populations/US.csv`.
+1. `tools/build-populations` (offline Python, never shipped): Canadian census microdata (Statistics Canada 2021 Census Individuals PUMF) → joint table of age band × gender × region × income × occupation group, under 1 MB, in `crates/core/data/populations/CA.csv`. (Corrected from an earlier US table.)
 2. `sampling`: draw skeletons with a seeded ChaCha RNG; rake to the quota marginals (iterative proportional fitting); apportion with the existing largest-remainder function. Countries without a census table sample each quota dimension independently. Tests: exact counts, same seed → same cohort, joint constraints respected.
 3. `PersonaEnrichment` schema per product category (for mobile phones: device age, current brand, upgrade trigger), checked against Gemini's JSON Schema subset by a unit test.
 4. `engine::cohort` job: batches of 8, diversity hint, screening with redraw from the same quota cell (failed personas kept as `screen_status = 'failed'`), validate → retry once → split batch, save per batch through the writer, stream `CohortProgress`.
@@ -87,7 +87,7 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 - Same seed → same demographics: covered by the sampler tests.
 - Engine tests on `ScriptedLlm`: 8 cohort-job tests pass, 69 core tests in total.
-- 200 live personas with exact quotas: the test `live_cohort_200_matches_quotas` is written, but it has not run yet. It runs in the nightly/manual `live` CI job once the `GEMINI_API_KEY` repository secret is added. A live batch of 4 personas passed earlier.
+- 200 live personas with exact quotas: the test `live_cohort_200_matches_quotas` is written, but it has not run yet. It runs in the nightly/manual `live` CI job once the `GEMINI_API_KEY` repository secret is added. A live batch of 4 personas passed earlier, on the earlier US table; the Canadian cohort has not been run live yet.
 
 ## M3 — Questionnaire and Simulation: Steps 3 and 4 (about 2.5 weeks; the core, so review it hardest)
 

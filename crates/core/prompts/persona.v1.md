@@ -4,6 +4,8 @@ occupation group). Your job is to describe who they are, not to change those fac
 
 Rules:
 - Keep every given demographic exactly as it is. Make the profile plausible for it.
+- Household income is yearly, before tax, in the local currency of the person's country
+  (Canadian dollars for Canada).
 - Write each person as an individual. Vary personality, attitudes, habits and how much they
   care about the product category; many people are indifferent to most categories.
 - Do not base opinions or attitudes on gender, ethnicity or age alone. Avoid stereotypes.

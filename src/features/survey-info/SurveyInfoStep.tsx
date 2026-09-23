@@ -104,7 +104,7 @@ export function SurveyInfoStep() {
         </div>
         <div className="col-span-2 flex flex-col gap-3">
           <Label htmlFor="title">Project Title</Label>
-          <input id="title" className={pillField} value={info.title} onChange={(e) => setInfo({ title: e.target.value })} placeholder="e.g., US Mobile Phone Purchase & Usage Study" />
+          <input id="title" className={pillField} value={info.title} onChange={(e) => setInfo({ title: e.target.value })} placeholder="e.g., Canada Mobile Phone Purchase & Usage Study" />
         </div>
         <div className="col-span-2 flex flex-col gap-2">
           <Label id="lbl-country">Target Country</Label>
@@ -114,7 +114,7 @@ export function SurveyInfoStep() {
         <div className="col-span-2 flex flex-col gap-2">
           <Label htmlFor="objective">Research Objective &amp; Requirements</Label>
           <Help>The more detail you give on research objectives, requirements and target respondent criteria, the better the Agent can propose a research design and questionnaire.</Help>
-          <textarea id="objective" rows={4} className={areaField} value={info.researchGoal} onChange={(e) => setInfo({ researchGoal: e.target.value })} placeholder="e.g., Objective: To analyze purchase behavior, brand choice drivers, and usage patterns among US smartphone owners." />
+          <textarea id="objective" rows={4} className={areaField} value={info.researchGoal} onChange={(e) => setInfo({ researchGoal: e.target.value })} placeholder="e.g., Objective: To analyze purchase behavior, brand choice drivers, and usage patterns among Canadian smartphone owners." />
         </div>
       </div>
 

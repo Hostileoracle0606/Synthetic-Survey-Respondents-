@@ -1,0 +1,14 @@
+{
+  "country": "CA",
+  "source": "2021 Census of Population, Individuals Public Use Microdata File (98M0001X), Statistics Canada",
+  "url": "https://www150.statcan.gc.ca/n1/pub/98m0001x/index-eng.htm",
+  "licence": "Statistics Canada Open Licence",
+  "universe": "Adults 18+ in private households; records with income, labour force status or occupation not available are skipped (about 1.7% of adults)",
+  "weight": "WEIGHT (individuals weighting factor); household income HHInc is 2020 income in CAD",
+  "ages": "Single-year ages spread evenly within each PUMF age group (AGEGRP); 85+ spread over 85-89",
+  "records_used": 770059,
+  "weighted_population": 28520931,
+  "cells": 970,
+  "built": "2026-09-23",
+  "builder": "tools/build-populations/build_ca.py"
+}

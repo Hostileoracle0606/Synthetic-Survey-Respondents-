@@ -101,7 +101,7 @@ async fn live_persona_batch() {
         }],
         screening: String::new(),
     };
-    let skeletons = Sampler::new(&cfg, &["US".into()]).unwrap().draw().unwrap();
+    let skeletons = Sampler::new(&cfg, &["CA".into()]).unwrap().draw().unwrap();
     let req = build_request(
         &model,
         &BatchInput {
@@ -130,7 +130,7 @@ async fn live_persona_batch() {
     eprintln!("usage {:?}, {} ms", resp.usage, resp.latency_ms);
 }
 
-/// M2 exit check: a 200-person US cohort generated end to end through Gemini, with the
+/// M2 exit check: a 200-person Canadian cohort generated end to end through Gemini, with the
 /// kept respondents matching every quota row exactly. Takes several minutes at default limits.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "calls the live Gemini API (about 25 requests)"]
@@ -150,7 +150,7 @@ async fn live_cohort_200_matches_quotas() {
     let config = CohortConfig {
         size: 200,
         seed: 2026,
-        quotas: census_default_quotas("US").expect("US census table"),
+        quotas: census_default_quotas("CA").expect("CA census table"),
         screening: "Owns a smartphone.".into(),
     };
     let dir = tempfile::tempdir().unwrap();
@@ -166,7 +166,7 @@ async fn live_cohort_200_matches_quotas() {
     );
     let job = CohortJob {
         cohort_id: cohort.id,
-        countries: vec!["US".into()],
+        countries: vec!["CA".into()],
         category: Some("mobile_phone".into()),
         config: config.clone(),
         model: model.clone(),

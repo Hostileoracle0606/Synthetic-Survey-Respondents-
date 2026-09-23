@@ -26,7 +26,7 @@ pub struct Skeleton {
     pub region: String,
     pub income: String,
     pub occupation: String,
-    /// e.g. "age=30–44|region=South|income=Over $100k" — the quota values this person fills.
+    /// e.g. "age=30–44|region=Ontario|income=Over $100k" — the quota values this person fills.
     pub quota_cell: String,
 }
 
@@ -407,7 +407,7 @@ mod tests {
         }
     }
 
-    fn us_config(size: u32, seed: u64) -> CohortConfig {
+    fn ca_config(size: u32, seed: u64) -> CohortConfig {
         CohortConfig {
             size,
             seed,
@@ -419,10 +419,12 @@ mod tests {
                 g(
                     "region",
                     &[
-                        ("Northeast", 17),
-                        ("South", 38),
-                        ("Midwest", 21),
-                        ("West", 24),
+                        ("Atlantic", 7),
+                        ("Quebec", 23),
+                        ("Ontario", 38),
+                        ("Prairies", 17),
+                        ("British Columbia", 14),
+                        ("Territories", 1),
                     ],
                 ),
                 g(
@@ -439,10 +441,10 @@ mod tests {
     }
 
     #[test]
-    fn us_counts_are_exact_for_every_group() {
+    fn ca_counts_are_exact_for_every_group() {
         for size in [1, 7, 100, 200, 1000] {
-            let cfg = us_config(size, 42);
-            let skel = Sampler::new(&cfg, &["US".into()]).unwrap().draw().unwrap();
+            let cfg = ca_config(size, 42);
+            let skel = Sampler::new(&cfg, &["CA".into()]).unwrap().draw().unwrap();
             assert_eq!(skel.len() as u32, size);
             for grp in &cfg.quotas {
                 let want = apportion(
@@ -464,15 +466,15 @@ mod tests {
 
     #[test]
     fn same_seed_same_cohort_different_seed_different_cohort() {
-        let a = Sampler::new(&us_config(200, 7), &["US".into()])
+        let a = Sampler::new(&ca_config(200, 7), &["CA".into()])
             .unwrap()
             .draw()
             .unwrap();
-        let b = Sampler::new(&us_config(200, 7), &["US".into()])
+        let b = Sampler::new(&ca_config(200, 7), &["CA".into()])
             .unwrap()
             .draw()
             .unwrap();
-        let c = Sampler::new(&us_config(200, 8), &["US".into()])
+        let c = Sampler::new(&ca_config(200, 8), &["CA".into()])
             .unwrap()
             .draw()
             .unwrap();
@@ -482,7 +484,7 @@ mod tests {
 
     #[test]
     fn ages_fall_inside_their_band() {
-        let skel = Sampler::new(&us_config(500, 3), &["US".into()])
+        let skel = Sampler::new(&ca_config(500, 3), &["CA".into()])
             .unwrap()
             .draw()
             .unwrap();
@@ -501,7 +503,7 @@ mod tests {
     #[test]
     fn unquoted_dimensions_follow_the_census() {
         // No gender quota: the female share should be near the census 51%.
-        let skel = Sampler::new(&us_config(1000, 11), &["US".into()])
+        let skel = Sampler::new(&ca_config(1000, 11), &["CA".into()])
             .unwrap()
             .draw()
             .unwrap();
@@ -515,7 +517,7 @@ mod tests {
             size: 150,
             seed: 5,
             quotas: vec![
-                g("country", &[("United States", 60), ("Canada", 40)]),
+                g("country", &[("Canada", 60), ("United States", 40)]),
                 g(
                     "age",
                     &[("18–29", 25), ("30–44", 30), ("45–59", 25), ("60+", 20)],
@@ -527,35 +529,35 @@ mod tests {
             ],
             screening: String::new(),
         };
-        let skel = Sampler::new(&cfg, &["US".into(), "CA".into()])
+        let skel = Sampler::new(&cfg, &["CA".into(), "US".into()])
             .unwrap()
             .draw()
             .unwrap();
-        assert_eq!(counts(&skel, |s| &s.country, "US"), 90);
-        assert_eq!(counts(&skel, |s| &s.country, "CA"), 60);
+        assert_eq!(counts(&skel, |s| &s.country, "CA"), 90);
+        assert_eq!(counts(&skel, |s| &s.country, "US"), 60);
         assert_eq!(counts(&skel, |s| &s.age_band, "30–44"), 45);
         assert!(skel
             .iter()
-            .filter(|s| s.country == "CA")
+            .filter(|s| s.country == "US")
             .all(|s| (18..=84).contains(&s.age)));
     }
 
     #[test]
     fn bad_inputs_are_rejected() {
-        let mut cfg = us_config(100, 1);
+        let mut cfg = ca_config(100, 1);
         cfg.quotas[0].rows[0].label = "Teenagers".into();
         assert_eq!(
-            Sampler::new(&cfg, &["US".into()]).err().unwrap().code,
+            Sampler::new(&cfg, &["CA".into()]).err().unwrap().code,
             ErrorCode::InvalidInput
         );
-        assert!(Sampler::new(&us_config(100, 1), &[]).is_err());
+        assert!(Sampler::new(&ca_config(100, 1), &[]).is_err());
         // Two countries without a country quota group.
-        assert!(Sampler::new(&us_config(100, 1), &["US".into(), "CA".into()]).is_err());
+        assert!(Sampler::new(&ca_config(100, 1), &["CA".into(), "US".into()]).is_err());
     }
 
     #[test]
     fn redraw_keeps_the_quota_cell_and_is_reproducible() {
-        let s = Sampler::new(&us_config(50, 9), &["US".into()]).unwrap();
+        let s = Sampler::new(&ca_config(50, 9), &["CA".into()]).unwrap();
         let skel = s.draw().unwrap();
         let r1 = s.redraw(&skel[10], 1).unwrap();
         let r1b = s.redraw(&skel[10], 1).unwrap();
@@ -566,7 +568,7 @@ mod tests {
 
     #[test]
     fn census_defaults_total_100_and_follow_the_table() {
-        let groups = census_default_quotas("US").unwrap();
+        let groups = census_default_quotas("CA").unwrap();
         assert_eq!(
             groups.iter().map(|g| g.key.as_str()).collect::<Vec<_>>(),
             ["age", "region", "income"]
@@ -579,13 +581,13 @@ mod tests {
                 grp.key
             );
         }
-        let south = groups[1]
+        let ontario = groups[1]
             .rows
             .iter()
-            .find(|r| r.label == "South")
+            .find(|r| r.label == "Ontario")
             .unwrap()
             .percent;
-        assert!((35..=42).contains(&south), "South share {south}");
-        assert!(census_default_quotas("CA").is_none());
+        assert!((36..=42).contains(&ontario), "Ontario share {ontario}");
+        assert!(census_default_quotas("US").is_none());
     }
 }

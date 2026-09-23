@@ -89,7 +89,7 @@ First launch only: if no Gemini key is stored, the app opens Settings before Ste
 - Several countries: a Country group is added (equal split by default, editable) and Region is dropped. Region quotas across countries make little sense.
 - Head counts use largest-remainder rounding in Rust, so each group totals exactly N. The UI computes the same numbers for display only.
 
-**Countries without a census table.** v1 ships a US table only. For other countries, `has_census_table = false`: the sampler draws each quota dimension independently from the user's percentages instead of from real joint distributions. The country shows a "Quotas only, no census table" note in the dropdown.
+**Countries without a census table.** v1 ships a Canada table only (Statistics Canada 2021 Census Individuals PUMF). For other countries, `has_census_table = false`: the sampler draws each quota dimension independently from the user's percentages instead of from real joint distributions. The country shows a "Quotas only, no census table" note in the dropdown.
 
 ### Step 2 — Personas (background job 1)
 
@@ -253,6 +253,6 @@ Rate limits are shared: while a simulation runs, the persona and draft jobs of a
 ## 7. Open decisions
 
 - [ ] Survey length: the research-type presets (8–10 core questions plus 6 suggestions) are my assumption. Should Step 1 get a length control instead?
-- [ ] Countries other than the US: ship quotas-only sampling in v1 (as above), or limit the country list to countries with a census table?
+- [ ] Countries other than Canada: ship quotas-only sampling in v1 (as above), or limit the country list to countries with a census table?
 - [ ] Should "Stop & Save" be resumable later, or final as designed here?
 - [ ] Default synthesis trigger: automatic on completion (as designed), or only when the user opens the report?

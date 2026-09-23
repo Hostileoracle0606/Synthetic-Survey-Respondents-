@@ -82,11 +82,11 @@ fn parse_ages(csv: &str) -> Vec<(u32, f64)> {
 static TABLES: LazyLock<HashMap<&'static str, PopulationTable>> = LazyLock::new(|| {
     let mut m = HashMap::new();
     m.insert(
-        "US",
+        "CA",
         PopulationTable {
-            country: "US",
-            cells: parse_cells("US", include_str!("../../data/populations/US.csv")),
-            ages: parse_ages(include_str!("../../data/populations/US_ages.csv")),
+            country: "CA",
+            cells: parse_cells("CA", include_str!("../../data/populations/CA.csv")),
+            ages: parse_ages(include_str!("../../data/populations/CA_ages.csv")),
         },
     );
     m
@@ -96,12 +96,12 @@ pub fn table(country: &str) -> Option<&'static PopulationTable> {
     TABLES.get(country)
 }
 
-/// Occupation mix used for countries without a census table: the US adult mix, as a
+/// Occupation mix used for countries without a census table: the Canadian adult mix, as a
 /// neutral placeholder until those tables exist (BACKLOG B5).
 pub fn fallback_occupations() -> Vec<(String, f64)> {
-    let us = table("US").expect("US table is bundled");
+    let ca = table("CA").expect("CA table is bundled");
     let mut shares: Vec<(String, f64)> = Vec::new();
-    for c in &us.cells {
+    for c in &ca.cells {
         match shares.iter_mut().find(|(o, _)| *o == c.occupation) {
             Some((_, w)) => *w += c.weight,
             None => shares.push((c.occupation.clone(), c.weight)),
@@ -129,12 +129,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn us_table_loads_and_covers_every_dimension() {
-        let t = table("US").unwrap();
+    fn ca_table_loads_and_covers_every_dimension() {
+        let t = table("CA").unwrap();
         assert!(t.cells.len() > 500);
         let total: f64 = t.cells.iter().map(|c| c.weight).sum();
         assert!(
-            total > 2.0e8,
+            total > 2.5e7,
             "weighted adult population looks wrong: {total}"
         );
         for (band, _, _) in AGE_BANDS {
@@ -143,7 +143,7 @@ mod tests {
         for inc in INCOMES {
             assert!(t.cells.iter().any(|c| c.income == inc), "missing {inc}");
         }
-        assert_eq!(marginal(t, "region").len(), 4);
+        assert_eq!(marginal(t, "region").len(), 6);
         assert!(t.ages.iter().all(|(a, w)| *a >= 18 && *w > 0.0));
     }
 }

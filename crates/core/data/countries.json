@@ -2,7 +2,7 @@
   { "code": "AR", "name": "Argentina", "hasCensusTable": false, "regions": [] },
   { "code": "AU", "name": "Australia", "hasCensusTable": false, "regions": [] },
   { "code": "BR", "name": "Brazil", "hasCensusTable": false, "regions": [] },
-  { "code": "CA", "name": "Canada", "hasCensusTable": false, "regions": [] },
+  { "code": "CA", "name": "Canada", "hasCensusTable": true, "regions": ["Atlantic", "Quebec", "Ontario", "Prairies", "British Columbia", "Territories"] },
   { "code": "FR", "name": "France", "hasCensusTable": false, "regions": [] },
   { "code": "DE", "name": "Germany", "hasCensusTable": false, "regions": [] },
   { "code": "IN", "name": "India", "hasCensusTable": false, "regions": [] },
@@ -12,5 +12,5 @@
   { "code": "KR", "name": "South Korea", "hasCensusTable": false, "regions": [] },
   { "code": "ES", "name": "Spain", "hasCensusTable": false, "regions": [] },
   { "code": "GB", "name": "United Kingdom", "hasCensusTable": false, "regions": [] },
-  { "code": "US", "name": "United States", "hasCensusTable": true, "regions": ["Northeast", "South", "Midwest", "West"] }
+  { "code": "US", "name": "United States", "hasCensusTable": false, "regions": [] }
 ]

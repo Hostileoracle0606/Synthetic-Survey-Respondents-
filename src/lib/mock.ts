@@ -11,7 +11,7 @@ import type { SurveyInfo } from "../types/gen/SurveyInfo";
 
 const FIRST = ["Maya", "Gerald", "Priya", "Tom", "Sofia", "Andre", "Dana", "Luis", "Heather", "Kayla", "Ethan", "Latoya"];
 const LAST = ["Ortiz", "Price", "Nair", "Brennan", "Reyes", "Wallace", "Kowalski", "Ortega", "Cole", "Nguyen", "Park", "Brooks"];
-const JOBS = ["Service", "Sales & office", "Management & professional", "Production & transport", "Not in labor force"];
+const JOBS = ["Service", "Sales & office", "Management & professional", "Production & transport", "Not in labour force"];
 const BIASES = [["Status quo", "Price anchoring"], ["Brand-loyal", "Social proof"], ["Convenience-first", "Early adopter"]];
 
 let project: Project | null = null;
@@ -26,8 +26,8 @@ function person(i: number): RespondentDetail {
     name,
     age: 18 + ((i * 7) % 60),
     gender: i % 2 ? "Female" : "Male",
-    country: "US",
-    region: ["Northeast", "South", "Midwest", "West"][i % 4],
+    country: "CA",
+    region: ["Ontario", "Quebec", "British Columbia", "Prairies", "Atlantic"][i % 5],
     income: ["Under $50k", "$50k–$100k", "Over $100k"][i % 3],
     occupation: JOBS[i % 5],
     summary: `${name} is a sample persona from the browser preview. In the desktop app this text is written by Gemini from census-based demographics.`,

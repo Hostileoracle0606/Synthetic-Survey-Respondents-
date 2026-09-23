@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import { apportion, defaultQuotaGroups } from "./quota";
 import type { CountryOption } from "../types/gen/CountryOption";
 
-const us: CountryOption = { code: "US", name: "United States", hasCensusTable: true, regions: ["Northeast", "South", "Midwest", "West"] };
-const ca: CountryOption = { code: "CA", name: "Canada", hasCensusTable: false, regions: [] };
+const ca: CountryOption = {
+  code: "CA",
+  name: "Canada",
+  hasCensusTable: true,
+  regions: ["Atlantic", "Quebec", "Ontario", "Prairies", "British Columbia", "Territories"],
+};
+const us: CountryOption = { code: "US", name: "United States", hasCensusTable: false, regions: [] };
 
 describe("apportion", () => {
   it("matches the Rust fixed cases", () => {
@@ -19,17 +24,17 @@ describe("apportion", () => {
 
 describe("defaultQuotaGroups", () => {
   it("uses regions for one census country", () => {
-    expect(defaultQuotaGroups([us]).map((g) => g.key)).toEqual(["age", "region", "income"]);
+    expect(defaultQuotaGroups([ca]).map((g) => g.key)).toEqual(["age", "region", "income"]);
   });
 
   it("adds a country group and drops regions for several countries", () => {
-    const groups = defaultQuotaGroups([us, ca]);
+    const groups = defaultQuotaGroups([ca, us]);
     expect(groups.map((g) => g.key)).toEqual(["country", "age", "income"]);
     expect(groups[0].rows.reduce((a, r) => a + r.percent, 0)).toBe(100);
   });
 
   it("every default group totals 100", () => {
-    for (const g of defaultQuotaGroups([us])) {
+    for (const g of defaultQuotaGroups([ca])) {
       expect(g.rows.reduce((a, r) => a + r.percent, 0)).toBe(100);
     }
   });

@@ -88,7 +88,7 @@ Rust decides who is in the cohort; the LLM only describes them. This guarantees 
 - Quota dimensions: age band, gender, region, income bracket, occupation group, plus up to 3 custom dimensions. Each dimension is a list of `{value, share}` where shares sum to 1.0.
 - Optional joint constraints, e.g. "students only in age 18–24".
 - Screening criteria in plain text, e.g. "bought a laptop in the last 12 months".
-- Base population preset: "US adults", "UK adults" or "Custom". Presets ship as small CSV joint-distribution tables built offline from public census microdata.
+- Base population preset: "Canada adults" or "Custom". Presets ship as small CSV joint-distribution tables built offline from public census microdata; the Canada table comes from the Statistics Canada 2021 Census Individuals PUMF.
 
 **Steps**
 
@@ -450,7 +450,7 @@ The build is split into five milestones. M1 fixes the contracts so frontend and 
 - [ ] Which Gemini usage tier is the project on? It sets the default RPM, TPM and RPD limits and the safe default concurrency.
 - [ ] Windows 10 left mainstream support in October 2025. Keep it as a supported target, or ship Windows 11 only?
 - [ ] Is a code-signing certificate available, or does v1 ship unsigned for internal use?
-- [ ] Which base populations are needed first: US only, or also UK and other markets?
+- [x] Which base populations are needed first? **Decided: Canada** (2021 Census PUMF). Other countries use quotas-only sampling until they get a table.
 - [ ] Is the 1,000-respondent limit enough, or is 5,000+ needed?
 - [ ] Should `whole_survey` stay the default answer mode, or should `conversational` be the default?
 - [ ] Should approval need a second reviewer for surveys used in decisions, or is one reviewer enough?
