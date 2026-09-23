@@ -16,8 +16,9 @@ As of 2026-09-23. Work that was deliberately postponed so M2 could start, plus d
 |---|---|---|---|
 | B4 | Mark the cohort "out of date" when Step 1 audience fields change after generation (DATA_FLOW §2) | Users can regenerate by hand; no data is lost | Step 2 shows the banner when the saved `CohortConfig` differs from Step 1 |
 | B5 | Census tables for countries other than the US | v1 decision: other countries use quotas-only sampling, flagged in the country list | A table exists per supported country, built by `tools/build-populations` |
-| B6 | Finer age draw for the 60+ band | Ages inside a band are drawn uniformly; 60+ is drawn from 60–84 | Ages drawn from the census single-year distribution within each band |
+| ~~B6~~ | ~~Finer age draw for the 60+ band~~ | **Done in M2:** US ages are drawn from the census single-year distribution (`US_ages.csv`); countries without a census table still draw 60+ from 60–84 | — |
 | B7 | Non-binary respondents | The census records sex as two categories, so skeleton gender is binary | A documented, user-set share that the sampler applies on top of the census table |
+| B8 | Full stepper precondition rules (DATA_FLOW §2), e.g. Step 4 opens only with an approved survey | Steps 3–5 are placeholders until M3/M4; the stepper already blocks steps not yet reached | Each step's precondition is checked in the stepper and by its commands |
 
 ## Design changes agreed or proposed but not yet in the docs
 
@@ -38,4 +39,4 @@ As of 2026-09-23. Work that was deliberately postponed so M2 could start, plus d
 | Stop & Save final or resumable | M3 | Final |
 | Synthesis automatic or on demand | M4 | Automatic on completion |
 | Cloud and budget for Windows 11 release VMs | M5 | Azure, started only for release runs |
-| Rotate the Gemini key shared in chat; add it as the `GEMINI_API_KEY` repository secret | Now | Not confirmed |
+| Rotate the Gemini key shared in chat; add it as the `GEMINI_API_KEY` repository secret | Now: the M2 live exit check (`live_cohort_200_matches_quotas`) runs only in the `live` CI job | Not confirmed |

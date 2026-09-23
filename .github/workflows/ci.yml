@@ -79,6 +79,7 @@ jobs:
 
   live:
     name: Live Gemini checks (nightly or manual)
+    timeout-minutes: 45
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:

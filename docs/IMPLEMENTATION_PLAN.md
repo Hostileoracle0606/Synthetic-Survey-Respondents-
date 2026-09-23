@@ -83,6 +83,12 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 **Exit:** 200 personas generated against the live API match quotas exactly; the same seed reproduces the same demographics; engine tests pass on `ScriptedLlm`.
 
+**Status (2026-09-23):** items 0–6, 8 and 10 are built; item 9 is partly done (the stepper opens a step once it has been reached; the full precondition rules come with M3's steps). Exit criteria:
+
+- Same seed → same demographics: covered by the sampler tests.
+- Engine tests on `ScriptedLlm`: 8 cohort-job tests pass, 69 core tests in total.
+- 200 live personas with exact quotas: the test `live_cohort_200_matches_quotas` is written, but it has not run yet. It runs in the nightly/manual `live` CI job once the `GEMINI_API_KEY` repository secret is added. A live batch of 4 personas passed earlier.
+
 ## M3 — Questionnaire and Simulation: Steps 3 and 4 (about 2.5 weeks; the core, so review it hardest)
 
 **Rust track**
