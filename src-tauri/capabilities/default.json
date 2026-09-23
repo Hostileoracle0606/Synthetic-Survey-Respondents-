@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window may only use core events and this app's own commands. No shell, fs, http or sql plugins.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

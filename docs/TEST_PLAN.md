@@ -212,7 +212,7 @@ Covers SM16.
 
 | Test | Asserts |
 |---|---|
-| `bindings_up_to_date` | Regenerating `src/bindings.ts` produces no diff |
+| `bindings_up_to_date` | Running `cargo test -p survey-core` regenerates `src/types/gen/` with no diff |
 | `every_command_registered` | Every command in the spec §7 table is registered and appears in the bindings |
 | `app_error_shape` | Every error path serialises to `{ code, message }`; `code` is from a fixed enum |
 | `channel_message_shapes` | Sample `RunProgress` and `CohortProgress` messages deserialise in TypeScript (Vitest, against generated types) |

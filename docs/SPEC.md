@@ -58,7 +58,7 @@ The UI never sees the API key and never runs SQL; it only calls commands and rec
 | Layer | Choice | Why |
 | --- | --- | --- |
 | UI | React 18, TypeScript, Tailwind, Lucide, Recharts, TanStack Table + Virtual | Recharts for live charts; virtualised grid for 50k answers |
-| IPC types | `tauri-specta` | Generates TypeScript bindings from Rust command signatures |
+| IPC types | `ts-rs` | Generates TypeScript types from the Rust data types in `survey-core`; typed `invoke` wrappers live in `src/lib/api.ts` |
 | Async | `tokio` | Worker pool, cancellation, channels |
 | HTTP | `reqwest` (rustls) | Avoids OpenSSL on Windows |
 | LLM client | Own thin Gemini adapter over `reqwest`, behind the `LlmProvider` trait | One provider in v1; keeps binary small |
@@ -259,7 +259,7 @@ The schema adds cohorts, surveys, runs and an LLM call log to the original draft
 
 ## 7. Tauri commands and events
 
-These contracts are fixed first, so frontend and backend can be built in parallel. Types are Rust structs exported to TypeScript with `tauri-specta`. Every command returns `Result<T, AppError>`, where `AppError` has a `code` and a human-readable `message`.
+These contracts are fixed first, so frontend and backend can be built in parallel. Types are Rust structs exported to TypeScript with `ts-rs` (into `src/types/gen/`). Every command returns `Result<T, AppError>`, where `AppError` has a `code` and a human-readable `message`.
 
 **Commands**
 
