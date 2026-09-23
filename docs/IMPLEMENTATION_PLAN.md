@@ -110,6 +110,30 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 **Exit:** a survey is drafted, reviewed and approved; a run on an unapproved survey is refused by the database; the six acceptance tests in SPEC §11 pass, including kill-and-relaunch and the forced 30% 429 test against the mock.
 
+**Status (2026-09-23):** built:
+- **Items 1, 3–8 and 10–11.** The draft uses the newest stable Pro model the key can use, and falls back to Flash.
+- **Item 9, in part.** `survey_draft.v1` and `answer.v1` exist. Ignored live tests cover both.
+
+Deferred to the backlog:
+- the critic (item 2);
+- `suggest_more` (item 3);
+- drag reordering: up/down buttons and Alt+↑/↓ are built instead;
+- cost figures, which need the price table;
+- `insta` snapshots and the nightly `cached_tokens` check (item 9).
+
+See BACKLOG B9–B15.
+
+Exit criteria:
+- Drafted, reviewed and approved: done (`db::surveys` and `engine::draft` tests; browser pass on the mock).
+- The database refuses a run on an unapproved survey: done. `a_run_on_an_unapproved_survey_is_refused_by_the_database` covers both the command and a direct insert.
+- SPEC §11 acceptance tests, on `ScriptedLlm`:
+  - 100 × 20 at 10 concurrent calls: done. The test uses 300 ms per call and finishes in about 3 s, the ideal. With Gemini's ~5–10 s per call that is 50–100 s, under the 3-minute budget.
+  - Kill and relaunch with no duplicate or lost answers: done.
+  - Forced 30% 429s complete with reduced concurrency: done.
+  - Same seed gives the same option orders: done.
+  - 60 fps and memory with 1,000 respondents: not yet. It needs the M5 Windows VMs (B14).
+  - No API key in the database, logs or exports: not yet. It waits for exports in M4 (B15).
+
 ## M4 — Report: Step 5 (about 1.5 weeks)
 
 1. `analysis`: SQL aggregates per question type (counts and %, Likert distribution and mean, numeric median and IQR), cross-tabs by any quota dimension, low base under 30. Golden-fixture tests.

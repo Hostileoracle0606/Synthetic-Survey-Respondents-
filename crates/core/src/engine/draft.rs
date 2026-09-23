@@ -32,6 +32,13 @@ pub struct DraftBrief {
     pub objective: String,
 }
 
+impl DraftBrief {
+    /// Stored on the survey (`brief_json`) so the draft can be traced.
+    pub fn to_json(&self) -> Value {
+        serde_json::to_value(self).unwrap_or_default()
+    }
+}
+
 /// Research-type presets: (core questions, suggestions, focus).
 pub fn preset(t: ResearchType) -> (usize, usize, &'static str) {
     match t {

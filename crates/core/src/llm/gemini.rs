@@ -351,13 +351,15 @@ mod tests {
     }
 }
 
-/// Picks the newest stable plain Flash model (`gemini-<version>-flash`) from `list_models`.
-/// Older models can be closed to new keys, so model IDs are never hard-coded.
-pub fn newest_stable_flash(models: &[String]) -> Option<String> {
+/// The newest stable model of a family ("flash" or "pro"): `gemini-<version>-<family>`,
+/// skipping previews, lite and dated variants. New API keys can't use older models, so the
+/// app picks from what `list_models` returns instead of hard-coding one.
+pub fn newest_stable(models: &[String], family: &str) -> Option<String> {
+    let suffix = format!("-{family}");
     models
         .iter()
         .filter_map(|m| {
-            let version = m.strip_prefix("gemini-")?.strip_suffix("-flash")?;
+            let version = m.strip_prefix("gemini-")?.strip_suffix(suffix.as_str())?;
             let parts: Vec<u32> = version
                 .split('.')
                 .map(|p| p.parse().ok())
@@ -368,9 +370,13 @@ pub fn newest_stable_flash(models: &[String]) -> Option<String> {
         .map(|(_, m)| m)
 }
 
+pub fn newest_stable_flash(models: &[String]) -> Option<String> {
+    newest_stable(models, "flash")
+}
+
 #[cfg(test)]
 mod pick_tests {
-    use super::newest_stable_flash;
+    use super::{newest_stable, newest_stable_flash};
 
     #[test]
     fn picks_the_highest_plain_flash_version() {
@@ -390,5 +396,9 @@ mod pick_tests {
             Some("gemini-3.8-flash")
         );
         assert_eq!(newest_stable_flash(&[]), None);
+        assert_eq!(
+            newest_stable(&models, "pro").as_deref(),
+            Some("gemini-3.1-pro")
+        );
     }
 }

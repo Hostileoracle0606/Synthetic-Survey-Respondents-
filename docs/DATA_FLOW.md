@@ -233,7 +233,8 @@ All are in [`schema.sql`](schema.sql) and were tested in SQLite.
 | `projects` | `research_type`, `product_category`, `countries_json`, `wizard_step` | Step 1 fields and the stepper |
 | `respondents` | `country`, `category_profile_json` | Multi-country cohorts; category facts shown in the drawer and cross-tabs |
 | `questions` | `review_status` gains `suggested` | AI suggestions sidebar; suggestions stay inactive until added |
-| `simulation_runs` | `status` gains `stopped` | Stop & Save keeps a reportable partial run |
+| `simulation_runs` | `status` gains `stopped`; `error` | Stop & Save keeps a reportable partial run; why a run paused itself (bad key, quota spent) |
+| `surveys` | `draft_status` (`none`, `generating`, `ready`, `failed`), `draft_error` | Step 3 shows drafting progress and "Draft failed — retry" |
 | `llm_calls` | `purpose` gains `suggestion`, `synthesis` | Cost and latency per task |
 | `syntheses` (new) | Stores each AI synthesis with model, prompt version and `based_on_n` | Report screen; reproducibility |
 

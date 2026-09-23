@@ -228,3 +228,147 @@ async fn live_cohort_200_matches_quotas() {
         started.elapsed().as_secs_f64()
     );
 }
+
+/// M3: the draft prompt returns a usable questionnaire on the real API (Pro when the key has
+/// it, else Flash), with no expected answers anywhere in the reply.
+#[tokio::test]
+#[ignore = "calls the live Gemini API"]
+async fn live_survey_draft() {
+    use survey_core::engine::draft::{build_request, parse_reply, preset, DraftBrief};
+    use survey_core::model::ResearchType;
+    let c = client();
+    let models = c.list_models().await.expect("list_models");
+    let model = survey_core::llm::gemini::newest_stable(&models, "pro")
+        .or_else(|| survey_core::llm::gemini::newest_stable_flash(&models))
+        .expect("a model");
+    let brief = DraftBrief {
+        research_type: ResearchType::MarketResponse,
+        product_category: Some("mobile_phone".into()),
+        countries: vec!["Canada".into()],
+        title: "Smartphone upgrade intent".into(),
+        objective: "Understand what drives Canadians to replace their smartphone, what they would pay, and what holds them back.".into(),
+    };
+    let resp = c
+        .complete_structured(&build_request(&model, &brief))
+        .await
+        .expect("draft call succeeds");
+    let draft = parse_reply(&resp.json, preset(brief.research_type).0).expect("usable draft");
+    assert!(
+        draft.questions.len() >= 8,
+        "{} core questions",
+        draft.questions.len()
+    );
+    let text = resp.json.to_string().to_lowercase();
+    assert!(!text.contains("expected answer"));
+    eprintln!(
+        "model {model}: {} core, {} suggestions, {} ms, usage {:?}",
+        draft.questions.len(),
+        draft.suggestions.len(),
+        resp.latency_ms,
+        resp.usage
+    );
+}
+
+/// M3: one whole-survey answering call on the real API passes every answer check.
+#[tokio::test]
+#[ignore = "calls the live Gemini API"]
+async fn live_whole_survey_answer() {
+    use survey_core::engine::answer::{build_request, check_reply, shown_order};
+    use survey_core::model::{
+        ChoiceOption, NumericRange, Question, QuestionBody, QuestionOrigin, QuestionType,
+        ReviewStatus, Scale,
+    };
+    let c = client();
+    let model = pick_model(&c).await;
+    let q = |id: i64, t: QuestionType, text: &str| Question {
+        id,
+        code: format!("Q{id}"),
+        order_index: id as u32,
+        body: QuestionBody {
+            text: text.into(),
+            question_type: t,
+            options: if matches!(t, QuestionType::SingleChoice | QuestionType::MultiChoice) {
+                [
+                    "Battery life",
+                    "Camera",
+                    "Price drop",
+                    "Phone broke",
+                    "None of these",
+                ]
+                .iter()
+                .enumerate()
+                .map(|(i, l)| ChoiceOption {
+                    code: ((b'A' + i as u8) as char).to_string(),
+                    label: l.to_string(),
+                })
+                .collect()
+            } else {
+                vec![]
+            },
+            randomize: true,
+            max_choices: Some(2),
+            scale: (t == QuestionType::Likert).then(|| Scale {
+                min: 1,
+                max: 7,
+                min_label: "Not at all likely".into(),
+                max_label: "Extremely likely".into(),
+            }),
+            numeric: (t == QuestionType::Numeric).then(|| NumericRange {
+                min: 0.0,
+                max: 3000.0,
+                unit: "CAD".into(),
+            }),
+        },
+        is_active: true,
+        origin: QuestionOrigin::Ai,
+        review_status: ReviewStatus::Accepted,
+        objective: None,
+        rationale: None,
+    };
+    let qs = [
+        q(
+            1,
+            QuestionType::SingleChoice,
+            "What would most likely make you replace your phone?",
+        ),
+        q(
+            2,
+            QuestionType::MultiChoice,
+            "Which of these matter when choosing a new phone?",
+        ),
+        q(
+            3,
+            QuestionType::Likert,
+            "How likely are you to buy a new phone in the next 12 months?",
+        ),
+        q(
+            4,
+            QuestionType::Numeric,
+            "What is the most you would pay for your next phone?",
+        ),
+        q(
+            5,
+            QuestionType::OpenEnded,
+            "What, if anything, puts you off upgrading?",
+        ),
+    ];
+    let pairs: Vec<_> = qs.iter().map(|x| (x, shown_order(x, 7, 1))).collect();
+    let persona = "Name: Marie Tremblay\nAge: 58\nGender: Female\nLives in: Quebec, Canada\nHousehold income: $50k–$100k (yearly, local currency)\nOccupation group: Sales & office\n\nMarie keeps her phone until it stops working and dislikes paying for features she won't use.\n";
+    let resp = c
+        .complete_structured(&build_request(
+            &model,
+            "Thanks for taking part.",
+            &pairs,
+            persona,
+        ))
+        .await
+        .expect("answer call succeeds");
+    let checked = check_reply(&pairs, &resp.json);
+    for r in &checked {
+        assert!(r.is_ok(), "{r:?} in {}", resp.json);
+    }
+    eprintln!(
+        "model {model}: {} in {} ms, usage {:?}",
+        resp.json, resp.latency_ms, resp.usage
+    );
+}

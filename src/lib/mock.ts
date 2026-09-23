@@ -7,6 +7,11 @@ import type { Project } from "../types/gen/Project";
 import type { RespondentCard } from "../types/gen/RespondentCard";
 import type { RespondentDetail } from "../types/gen/RespondentDetail";
 import type { RespondentPage } from "../types/gen/RespondentPage";
+import type { Question } from "../types/gen/Question";
+import type { QuestionBody } from "../types/gen/QuestionBody";
+import type { RunProgress } from "../types/gen/RunProgress";
+import type { SimulationRun } from "../types/gen/SimulationRun";
+import type { Survey } from "../types/gen/Survey";
 import type { SurveyInfo } from "../types/gen/SurveyInfo";
 
 const FIRST = ["Maya", "Gerald", "Priya", "Tom", "Sofia", "Andre", "Dana", "Luis", "Heather", "Kayla", "Ethan", "Latoya"];
@@ -64,6 +69,87 @@ function start(config: CohortConfig, onProgress: (p: CohortProgress) => void, id
   return cohort;
 }
 
+const opts = (labels: string[]) => labels.map((label, i) => ({ code: String.fromCharCode(65 + i), label }));
+const DRAFT: [string, QuestionBody][] = [
+  ["Q1_OWN", { text: "Which brand is your current smartphone?", questionType: "single_choice", options: opts(["[Brand A]", "[Brand B]", "[Brand C]", "Other"]), randomize: true, maxChoices: null, scale: null, numeric: null }],
+  ["Q2_AGE", { text: "How long have you had your current phone?", questionType: "single_choice", options: opts(["Under 1 year", "1–2 years", "2–3 years", "Over 3 years"]), randomize: false, maxChoices: null, scale: null, numeric: null }],
+  ["Q3_INTENT", { text: "How likely are you to buy a new phone in the next 12 months?", questionType: "likert", options: [], randomize: false, maxChoices: null, scale: { min: 1, max: 7, minLabel: "Not at all likely", maxLabel: "Extremely likely" }, numeric: null }],
+  ["Q4_DRIVERS", { text: "Which of these would most make you upgrade?", questionType: "multi_choice", options: opts(["Battery life", "Camera", "Price drop", "Damage", "Carrier deal"]), randomize: true, maxChoices: 2, scale: null, numeric: null }],
+  ["Q5_BUDGET", { text: "What is the most you would pay for your next phone?", questionType: "numeric", options: [], randomize: false, maxChoices: null, scale: null, numeric: { min: 0, max: 2500, unit: "CAD" } }],
+  ["Q6_WHY", { text: "In a sentence, what would stop you from upgrading?", questionType: "open_ended", options: [], randomize: false, maxChoices: null, scale: null, numeric: null }],
+];
+const SUGGESTED: [string, QuestionBody][] = [
+  ["S1_TRADEIN", { text: "Would a trade-in offer change when you upgrade?", questionType: "single_choice", options: opts(["Yes, sooner", "No difference", "Not sure"]), randomize: true, maxChoices: null, scale: null, numeric: null }],
+  ["S2_CARRIER", { text: "How satisfied are you with your mobile carrier?", questionType: "likert", options: [], randomize: false, maxChoices: null, scale: { min: 1, max: 5, minLabel: "Very dissatisfied", maxLabel: "Very satisfied" }, numeric: null }],
+];
+
+let survey: Survey | null = null;
+let nextId = 100;
+let run: SimulationRun | null = null;
+let runTimer: ReturnType<typeof setInterval> | null = null;
+let runListener: ((p: RunProgress) => void) | null = null;
+
+function q(code: string, body: QuestionBody, active: boolean): Question {
+  const id = nextId++;
+  return { id, code, orderIndex: id, body, isActive: active, origin: "ai", reviewStatus: active ? "pending" : "suggested", objective: "Purchase intent and drivers", rationale: "Preview question." };
+}
+
+function ensureSurvey(): Survey {
+  if (!survey) {
+    survey = { id: 1, projectId: project?.id ?? 1, title: project?.title ?? "Survey", intro: "", status: "draft", draftStatus: "generating", draftError: null, questions: [], suggestions: [] };
+    setTimeout(() => {
+      if (!survey) return;
+      survey = {
+        ...survey,
+        status: "in_review",
+        draftStatus: "ready",
+        intro: "Thanks for taking part. There are no right or wrong answers.",
+        questions: DRAFT.map(([c, b]) => q(c, b, true)),
+        suggestions: SUGGESTED.map(([c, b]) => q(c, b, false)),
+      };
+    }, 1500);
+  }
+  return survey;
+}
+
+function patchQuestion(id: number, f: (q: Question) => Question): Question {
+  const s = ensureSurvey();
+  s.questions = s.questions.map((x) => (x.id === id ? f(x) : x));
+  if (s.status === "approved") s.status = "in_review";
+  return s.questions.find((x) => x.id === id)!;
+}
+
+function tickRun(onProgress: (p: RunProgress) => void) {
+  const s = ensureSurvey();
+  const total = people.length * s.questions.length;
+  runListener = onProgress;
+  onProgress({ kind: "status", status: "running" });
+  runTimer = setInterval(() => {
+    if (!run) return;
+    const start = run.respondentsDone;
+    const end = Math.min(start + 3, people.length);
+    const deltas = [];
+    const consoleLines = [];
+    for (let i = start; i < end; i++) {
+      const p = people[i];
+      for (const qq of s.questions) {
+        const b = qq.body;
+        const pick = b.options.length ? b.options[(i * 7 + qq.id) % b.options.length] : null;
+        const value = b.scale ? b.scale.min + ((i + qq.id) % (b.scale.max - b.scale.min + 1)) : b.numeric ? 400 + ((i * 97) % 900) : null;
+        deltas.push({ questionId: qq.id, respondentId: p.id, code: b.questionType === "single_choice" ? pick!.code : null, codes: b.questionType === "multi_choice" ? [pick!.code] : null, value });
+        consoleLines.push({ at: String(Date.now()), respondent: p.ordinal, question: qq.code, answer: pick?.label ?? (value != null ? String(value) : "Only if my phone breaks."), reason: "Preview answer." });
+      }
+    }
+    run = { ...run, respondentsDone: end, answered: end * s.questions.length };
+    onProgress({ kind: "batch", answered: run.answered, totalAnswers: total, respondentsDone: end, costUsd: null, avgLatencyMs: 4200, p95LatencyMs: 7900, answersPerMin: 12 * s.questions.length * 3, concurrency: 4, deltas, console: consoleLines.slice(-20) });
+    if (end >= people.length) {
+      clearInterval(runTimer!);
+      run = { ...run, status: "completed" };
+      onProgress({ kind: "status", status: "completed" });
+    }
+  }, 250);
+}
+
 export const mock = {
   saveSurveyInfo: async (projectId: number | null, info: SurveyInfo): Promise<Project> => {
     const now = new Date().toISOString();
@@ -100,5 +186,66 @@ export const mock = {
   lockCohort: async (): Promise<Cohort> => {
     cohort = { ...cohort!, status: "locked" };
     return cohort;
+  },
+  getSurvey: async (): Promise<Survey> => structuredClone(ensureSurvey()),
+  redraftSurvey: async (): Promise<Survey> => {
+    const s = ensureSurvey();
+    s.questions = s.questions.filter((x) => x.origin !== "ai" || x.reviewStatus !== "pending");
+    s.suggestions = [];
+    survey = null;
+    const fresh = ensureSurvey();
+    fresh.questions = s.questions;
+    return structuredClone(fresh);
+  },
+  updateQuestion: async (id: number, body: QuestionBody): Promise<Question> =>
+    structuredClone(patchQuestion(id, (x) => ({ ...x, body, origin: x.origin === "ai" ? "ai_edited" : x.origin, reviewStatus: "pending" }))),
+  reorderQuestions: async (ids: number[]): Promise<Survey> => {
+    const s = ensureSurvey();
+    s.questions = ids.map((id, i) => ({ ...s.questions.find((x) => x.id === id)!, orderIndex: i + 1 }));
+    return structuredClone(s);
+  },
+  addQuestion: async (): Promise<Question> => {
+    const s = ensureSurvey();
+    const nq: Question = { ...q(`Q${s.questions.length + 1}`, { text: "New question", questionType: "single_choice", options: opts(["Option 1", "Option 2"]), randomize: true, maxChoices: null, scale: null, numeric: null }, true), origin: "human", objective: null, rationale: null };
+    s.questions.push(nq);
+    return structuredClone(nq);
+  },
+  deleteQuestion: async (id: number): Promise<Survey> => {
+    const s = ensureSurvey();
+    s.questions = s.questions.filter((x) => x.id !== id);
+    return structuredClone(s);
+  },
+  approveQuestion: async (id: number): Promise<Question> => structuredClone(patchQuestion(id, (x) => ({ ...x, reviewStatus: "accepted" }))),
+  addSuggestion: async (id: number): Promise<Survey> => {
+    const s = ensureSurvey();
+    const sug = s.suggestions.find((x) => x.id === id)!;
+    s.suggestions = s.suggestions.filter((x) => x.id !== id);
+    s.questions.push({ ...sug, isActive: true, reviewStatus: "pending" });
+    return structuredClone(s);
+  },
+  startSimulation: async (onProgress: (p: RunProgress) => void): Promise<SimulationRun> => {
+    const s = ensureSurvey();
+    if (s.questions.some((x) => x.reviewStatus !== "accepted")) throw { code: "survey_not_approved", message: "Every question must be approved first." };
+    s.status = "approved";
+    run = { id: (run?.id ?? 0) + 1, projectId: s.projectId, surveyId: s.id, cohortId: cohort?.id ?? 1, status: "running", model: "gemini-mock-flash", respondents: people.length, questions: s.questions.length, answered: 0, respondentsDone: 0, error: null, createdAt: new Date().toISOString() };
+    tickRun(onProgress);
+    return structuredClone(run);
+  },
+  getLatestRun: async () => (run ? structuredClone(run) : null),
+  pauseRun: async () => {
+    if (runTimer) clearInterval(runTimer);
+    if (run) run = { ...run, status: "paused" };
+    runListener?.({ kind: "status", status: "paused" });
+  },
+  resumeRun: async (onProgress: (p: RunProgress) => void): Promise<SimulationRun> => {
+    run = { ...run!, status: "running" };
+    tickRun(onProgress);
+    return structuredClone(run);
+  },
+  stopRun: async (): Promise<SimulationRun> => {
+    if (runTimer) clearInterval(runTimer);
+    run = { ...run!, status: "stopped" };
+    runListener?.({ kind: "status", status: "stopped" });
+    return structuredClone(run);
   },
 };

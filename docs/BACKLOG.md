@@ -20,6 +20,19 @@ As of 2026-09-23. The census population is Canada's (Statistics Canada 2021 Cens
 | B7 | Non-binary respondents | The census records sex as two categories, so skeleton gender is binary | A documented, user-set share that the sampler applies on top of the census table |
 | B8 | Full stepper precondition rules (DATA_FLOW §2), e.g. Step 4 opens only with an approved survey | Steps 3–5 are placeholders until M3/M4; the stepper already blocks steps not yet reached | Each step's precondition is checked in the stepper and by its commands |
 
+## Deferred from M3
+
+| # | Item | Why it can wait | Done when |
+|---|---|---|---|
+| B9 | Critic: a second Gemini call flags leading, double-barrelled or unclear questions on every drafted, added or edited question (M3 item 2) | The reviewer approves every question anyway; the critic is advice | Flags show on each question in Step 3 and are stored with it |
+| B10 | "Suggest more" in the suggestions sidebar (`suggest_more`) | The draft already returns 6 suggestions, and people can write their own | The button adds new suggestions, deduplicated against existing text |
+| B11 | Drag-and-drop reordering in Step 3 | Up/down buttons and Alt+↑/↓ already reorder | Questions can be dragged, with the same `reorder_questions` command |
+| B12 | Cost: estimate before a run (`est_cost_usd`) and live cost in Step 4 | Needs the price table from the Settings screen (B1); the card shows "$—" until then | The estimate shows before Run Survey Simulation and cost updates live |
+| B13 | `insta` snapshot tests for the prompts, and the nightly check that Gemini's implicit cache hits (`cached_tokens` > 0) | Prompts are versioned and covered by unit and live tests | Snapshots fail on any unversioned prompt change; the live job reports cache hits |
+| B14 | SPEC §11 performance check: 60 fps and memory limits with 1,000 respondents streaming | Needs the Windows release VMs (M5) | Measured on the M5 VMs within the limits |
+| B15 | SPEC §11 check that no API key appears in the database, logs or exports | Exports arrive in M4; the key only ever lives in the OS keychain | A test searches all three after a run with a known fake key |
+| B16 | Edit the survey title and the intro shown to respondents in Step 3 | The draft writes a neutral intro | Both are editable in Step 3 and saved |
+
 ## Design changes agreed or proposed but not yet in the docs
 
 | # | Change | Status | Where it goes |

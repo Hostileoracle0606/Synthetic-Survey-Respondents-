@@ -17,6 +17,12 @@ import type { Project } from "../types/gen/Project";
 import type { QuotaGroup } from "../types/gen/QuotaGroup";
 import type { RespondentDetail } from "../types/gen/RespondentDetail";
 import type { RespondentPage } from "../types/gen/RespondentPage";
+import type { Question } from "../types/gen/Question";
+import type { QuestionBody } from "../types/gen/QuestionBody";
+import type { RunConfig } from "../types/gen/RunConfig";
+import type { RunProgress } from "../types/gen/RunProgress";
+import type { SimulationRun } from "../types/gen/SimulationRun";
+import type { Survey } from "../types/gen/Survey";
 import type { SurveyInfo } from "../types/gen/SurveyInfo";
 import { defaultQuotaGroups } from "./quota";
 import { mock } from "./mock";
@@ -31,8 +37,8 @@ export function errorMessage(e: unknown): string {
   return isAppError(e) ? e.message : String(e);
 }
 
-function progressChannel(onProgress: (p: CohortProgress) => void): Channel<CohortProgress> {
-  const ch = new Channel<CohortProgress>();
+function progressChannel<T = CohortProgress>(onProgress: (p: T) => void): Channel<T> {
+  const ch = new Channel<T>();
   ch.onmessage = onProgress;
   return ch;
 }
@@ -63,6 +69,29 @@ export const api = {
   getRespondent: (respondentId: number): Promise<RespondentDetail> =>
     inTauri ? invoke("get_respondent", { respondentId }) : mock.getRespondent(respondentId),
   lockCohort: (cohortId: number): Promise<Cohort> => (inTauri ? invoke("lock_cohort", { cohortId }) : mock.lockCohort()),
+  getSurvey: (projectId: number): Promise<Survey> => (inTauri ? invoke("get_survey", { projectId }) : mock.getSurvey()),
+  redraftSurvey: (projectId: number): Promise<Survey> => (inTauri ? invoke("redraft_survey", { projectId }) : mock.redraftSurvey()),
+  updateQuestion: (questionId: number, body: QuestionBody): Promise<Question> =>
+    inTauri ? invoke("update_question", { questionId, body }) : mock.updateQuestion(questionId, body),
+  reorderQuestions: (surveyId: number, orderedIds: number[]): Promise<Survey> =>
+    inTauri ? invoke("reorder_questions", { surveyId, orderedIds }) : mock.reorderQuestions(orderedIds),
+  addQuestion: (surveyId: number): Promise<Question> => (inTauri ? invoke("add_question", { surveyId }) : mock.addQuestion()),
+  deleteQuestion: (questionId: number): Promise<Survey> =>
+    inTauri ? invoke("delete_question", { questionId }) : mock.deleteQuestion(questionId),
+  approveQuestion: (questionId: number): Promise<Question> =>
+    inTauri ? invoke("approve_question", { questionId }) : mock.approveQuestion(questionId),
+  addSuggestion: (questionId: number): Promise<Survey> =>
+    inTauri ? invoke("add_suggestion", { questionId }) : mock.addSuggestion(questionId),
+  startSimulation: (projectId: number, config: RunConfig, onProgress: (p: RunProgress) => void): Promise<SimulationRun> =>
+    inTauri
+      ? invoke("start_simulation", { projectId, config, onProgress: progressChannel<RunProgress>(onProgress) })
+      : mock.startSimulation(onProgress),
+  getLatestRun: (projectId: number): Promise<SimulationRun | null> =>
+    inTauri ? invoke("get_latest_run", { projectId }) : mock.getLatestRun(),
+  pauseRun: (runId: number): Promise<void> => (inTauri ? invoke("pause_run", { runId }) : mock.pauseRun()),
+  resumeRun: (runId: number, onProgress: (p: RunProgress) => void): Promise<SimulationRun> =>
+    inTauri ? invoke("resume_run", { runId, onProgress: progressChannel<RunProgress>(onProgress) }) : mock.resumeRun(onProgress),
+  stopRun: (runId: number): Promise<SimulationRun> => (inTauri ? invoke("stop_run", { runId }) : mock.stopRun()),
   hasApiKey: (): Promise<boolean> => (inTauri ? invoke("has_api_key") : Promise.resolve(true)),
   setApiKey: (key: string): Promise<void> => (inTauri ? invoke("set_api_key", { key }) : Promise.resolve()),
   testConnection: (): Promise<string[]> => (inTauri ? invoke("test_connection") : Promise.resolve(["gemini-mock-flash"])),
