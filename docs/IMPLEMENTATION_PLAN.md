@@ -6,7 +6,7 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 | Milestone | Wizard steps delivered | Estimate | Status |
 | --- | --- | --- | --- |
-| M1 Skeleton and contracts | Step 1 form (saves locally), shell, stepper | 1 week | Scaffolded; 5 items left |
+| M1 Skeleton and contracts | Step 1 form (saves locally), shell, stepper | 1 week | 11 of 16 items done |
 | M2 Personas | Step 1 → Step 2 end to end | 1.5 weeks | Not started |
 | M3 Questionnaire and Simulation | Steps 3 and 4 | 2.5 weeks | Not started |
 | M4 Report | Step 5 | 1.5 weeks | Not started |
@@ -24,7 +24,7 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 │  ├─ src/sampling.rs            quota apportionment (raking in M2)
 │  ├─ src/model.rs               types shared with the UI (ts-rs)
 │  └─ data/countries.json        Target Country list
-├─ src-tauri/                    survey-app: Tauri shell, commands only (builds on Windows CI)
+├─ src-tauri/                    survey-app: Tauri shell, commands only
 ├─ src/                          React UI
 │  ├─ features/<step>/           one folder per wizard step
 │  ├─ components/                AppShell, Stepper, form primitives
@@ -35,11 +35,11 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 └─ .github/workflows/ci.yml
 ```
 
-**Why two crates.** Tauri needs WebKitGTK to compile on Linux, which development containers and the Linux CI runner don't have. Keeping all logic in `survey-core` means it builds and tests anywhere; `survey-app` stays a thin shell compiled only on the Windows runner.
+**Why two crates.** Tauri needs WebKitGTK to compile on Linux, which the Linux CI runners don't install. Keeping all logic in `survey-core` means it builds and tests anywhere; `survey-app` stays a thin shell that CI compiles on Windows. To compile the shell on Linux, install `libwebkit2gtk-4.1-dev`.
 
 ## M1 — Skeleton and contracts (about 1 week)
 
-**Done by the scaffold** (checked locally: 36 Rust tests, 5 frontend tests, typecheck and production build pass; the Tauri shell has not been compiled yet, see item 10):
+**Done** (checked locally: 36 Rust tests, 5 frontend tests, typecheck and production build pass; the Tauri shell passes clippy, builds in release mode and starts on Linux):
 
 1. [x] Cargo workspace with `survey-core` and `survey-app`; size-optimised release profile.
 2. [x] React 18 + TypeScript + Vite + Tailwind 4, with Poppins, DM Sans and IBM Plex Mono bundled locally (the app may only contact Gemini, so no web fonts).
@@ -51,14 +51,15 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 8. [x] Tauri shell: `list_countries`, `save_survey_info`, `get_project`, `generate_cohort` (validates the Step 1 gate, then returns "planned for M2"), `set_api_key` / `has_api_key` / `delete_api_key` (Windows Credential Manager), `test_connection`. CSP and a capabilities file with `core:default` only.
 9. [x] UI: wizard shell and stepper from the prototype, full Step 1 form (research type, category, title, country multi-select with search, objective, respondents, quota groups that follow the country selection, screening) with the gate and hint text; Steps 2–5 are placeholders listing what they will do. `src/lib/api.ts` falls back to an in-memory mock in a plain browser.
 10. [x] CI: core job (fmt, clippy, tests, generated-types check), web job (typecheck, tests, build), Windows job (icons, clippy, `tauri build`, 15 MB installer check, installer artifact).
+11. [x] Live Gemini checks: `crates/core/tests/live_gemini.rs` (ignored by default) lists models and makes a structured call with the newest stable Flash model; a nightly CI job runs them with the `GEMINI_API_KEY` secret. Verified with a real key on `gemini-3.8-flash` (older models such as `gemini-2.5-flash` are closed to new keys, so model IDs are never hard-coded).
 
 **Left in M1**
 
-11. First green run of the Windows CI job. The Tauri shell has only been formatted, not compiled; expect small fixes.
-12. Settings screen: enter, test and delete the Gemini key; model IDs (Flash for personas and answers, Pro for drafting, critic, themes, synthesis and judging); Gemini usage tier; price table. First launch opens it when no key is stored.
-13. Autosave Step 1 on blur (`save_survey_info`), and reopen a project at `projects.wizard_step`.
-14. `ScriptedLlm`: in-process fake provider for engine tests (test plan §3).
-15. Frontend lint (ESLint with the React hooks rules) in the web CI job.
+12. First green run of the Windows CI job (installers under 15 MB). The compile errors found on the first run are fixed and the shell now builds locally.
+13. Settings screen: enter, test and delete the Gemini key; model IDs (Flash for personas and answers, Pro for drafting, critic, themes, synthesis and judging); Gemini usage tier; price table. First launch opens it when no key is stored.
+14. Autosave Step 1 on blur (`save_survey_info`), and reopen a project at `projects.wizard_step`.
+15. `ScriptedLlm`: in-process fake provider for engine tests (test plan §3).
+16. Frontend lint (ESLint with the React hooks rules) in the web CI job.
 
 **Exit:** the Windows job produces an installer under 15 MB; the key round-trips through Credential Manager; `test_connection` lists models for a real key; Step 1 saves and reopens.
 
@@ -134,7 +135,7 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 | Risk | Mitigation |
 |---|---|
-| Tauri shell only compiles on Windows CI | Keep it thin; all logic and tests in `survey-core`; first Windows run is an M1 exit item |
+| Tauri shell needs WebKitGTK to build on Linux | Keep it thin; all logic in `survey-core`; dev containers install `libwebkit2gtk-4.1-dev` to compile it locally |
 | Gemini schema limits or model changes break structured output | Schema-subset unit test; nightly live check on the default models; model IDs configurable |
 | Daily request quota runs out mid-run | Pre-run quota check; the run pauses with the reset time |
 | Installer creeps over 15 MB | CI size check on every push |

@@ -9,7 +9,9 @@ use survey_core::{db, sampling, AppError, AppResult, ErrorCode};
 
 use crate::{keychain, AppState};
 
-fn lock(state: &State<'_, AppState>) -> AppResult<std::sync::MutexGuard<'_, rusqlite::Connection>> {
+fn lock<'a>(
+    state: &'a State<'_, AppState>,
+) -> AppResult<std::sync::MutexGuard<'a, rusqlite::Connection>> {
     state
         .db
         .lock()
@@ -27,12 +29,12 @@ pub fn save_survey_info(
     project_id: Option<i64>,
     info: SurveyInfo,
 ) -> AppResult<Project> {
-    db::projects::save_survey_info(&lock(&state)?, project_id, &info)
+    db::projects::save_survey_info(&*lock(&state)?, project_id, &info)
 }
 
 #[tauri::command]
 pub fn get_project(state: State<'_, AppState>, project_id: i64) -> AppResult<Project> {
-    db::projects::get_project(&lock(&state)?, project_id)
+    db::projects::get_project(&*lock(&state)?, project_id)
 }
 
 /// Step 1 → Step 2. Validates the gate now; starting the persona and draft jobs lands in M2/M3.
@@ -42,7 +44,7 @@ pub fn generate_cohort(
     project_id: i64,
     config: CohortConfig,
 ) -> AppResult<()> {
-    let project = db::projects::get_project(&lock(&state)?, project_id)?;
+    let project = db::projects::get_project(&*lock(&state)?, project_id)?;
     if project.research_type.is_none() {
         return Err(AppError::invalid("choose a research type first"));
     }

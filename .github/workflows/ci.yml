@@ -3,6 +3,9 @@ name: CI
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "0 6 * * *" # nightly live Gemini checks
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,9 +13,10 @@ permissions:
 jobs:
   core:
     name: Rust core (fmt, clippy, tests, generated types)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -25,11 +29,12 @@ jobs:
 
   web:
     name: Frontend (typecheck, tests, build)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -43,11 +48,11 @@ jobs:
     runs-on: windows-latest
     needs: [core, web]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -71,3 +76,21 @@ jobs:
           path: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*-setup.exe
+
+  live:
+    name: Live Gemini checks (nightly or manual)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Require the GEMINI_API_KEY secret
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::Add GEMINI_API_KEY under Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+      - run: cargo test -p survey-core --test live_gemini -- --ignored --test-threads=1
