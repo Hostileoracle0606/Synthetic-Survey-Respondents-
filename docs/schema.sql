@@ -6,7 +6,11 @@ PRAGMA synchronous = NORMAL;
 CREATE TABLE projects (
     id            INTEGER PRIMARY KEY,
     title         TEXT NOT NULL,
-    research_goal TEXT,
+    research_type TEXT CHECK (research_type IN ('brand','market_response','concept')),  -- Step 1 dropdown
+    product_category TEXT,                  -- Step 1 dropdown, e.g. 'mobile_phone'
+    countries_json   TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(countries_json)),  -- ISO codes, e.g. ["US"]
+    research_goal TEXT,                     -- Step 1 "Research Objective & Requirements"
+    wizard_step   INTEGER NOT NULL DEFAULT 1 CHECK (wizard_step BETWEEN 1 AND 5),  -- furthest step reached
     created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -33,8 +37,11 @@ CREATE TABLE respondents (
     occupation            TEXT,
     income_bracket        TEXT,
     location              TEXT,
+    country               TEXT NOT NULL DEFAULT 'US',  -- ISO code; one of the project's countries
     psychographic_summary TEXT NOT NULL,
     persona_json          TEXT NOT NULL CHECK (json_valid(persona_json)),  -- full enrichment incl. biases
+    category_profile_json TEXT CHECK (category_profile_json IS NULL OR json_valid(category_profile_json)),
+        -- product-category facts, e.g. {"current_device_age_years":2,"current_brand":"[Brand A]","upgrade_trigger":"battery"}
     screen_status         TEXT NOT NULL DEFAULT 'passed'
                           CHECK (screen_status IN ('passed','failed','flagged')),
     created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -73,7 +80,8 @@ CREATE TABLE questions (
     origin         TEXT NOT NULL DEFAULT 'human'
                    CHECK (origin IN ('ai','ai_edited','human')),
     review_status  TEXT NOT NULL DEFAULT 'pending'
-                   CHECK (review_status IN ('pending','accepted','rejected')),
+                   CHECK (review_status IN ('suggested','pending','accepted','rejected')),
+        -- suggested = in the AI suggestions sidebar, is_active = 0 until "Add to survey"
     objective      TEXT,                     -- research objective this question serves (from the brief)
     rationale      TEXT,                     -- generator's reason for asking; never shown to respondents
     original_json  TEXT CHECK (original_json IS NULL OR json_valid(original_json)),  -- AI draft before human edits
@@ -97,7 +105,8 @@ CREATE TABLE simulation_runs (
     seed            INTEGER NOT NULL,
     max_concurrency INTEGER NOT NULL,
     status          TEXT NOT NULL DEFAULT 'queued'
-                    CHECK (status IN ('queued','running','paused','cancelled','completed','failed')),
+                    CHECK (status IN ('queued','running','paused','stopped','cancelled','completed','failed')),
+        -- stopped = "Stop & Save Progress": partial results kept and reportable; cancelled = discarded
     est_cost_usd    REAL,
     started_at      TEXT,
     finished_at     TEXT,
@@ -109,7 +118,7 @@ CREATE TABLE llm_calls (
     run_id          INTEGER REFERENCES simulation_runs(id) ON DELETE CASCADE,
     cohort_id       INTEGER REFERENCES cohorts(id) ON DELETE CASCADE,  -- set for Phase 1 calls
     respondent_id   INTEGER REFERENCES respondents(id) ON DELETE CASCADE,
-    purpose         TEXT NOT NULL CHECK (purpose IN ('persona','survey_draft','answer','theme','critic')),
+    purpose         TEXT NOT NULL CHECK (purpose IN ('persona','survey_draft','suggestion','answer','theme','critic','synthesis')),
     attempt         INTEGER NOT NULL DEFAULT 1,
     http_status     INTEGER,
     input_tokens    INTEGER,
@@ -155,6 +164,18 @@ CREATE TABLE response_themes (
     PRIMARY KEY (response_id, theme_id)
 );
 
+CREATE TABLE syntheses (
+    id             INTEGER PRIMARY KEY,
+    run_id         INTEGER NOT NULL REFERENCES simulation_runs(id) ON DELETE CASCADE,
+    llm_call_id    INTEGER REFERENCES llm_calls(id) ON DELETE SET NULL,
+    model          TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    based_on_n     INTEGER NOT NULL,        -- respondents included (partial if the run was stopped)
+    content_json   TEXT NOT NULL CHECK (json_valid(content_json)),
+        -- {"summary":"...","friction_points":[{"label":"...","mentions":71}],"segments":[{"segment":"18-29","takeaway":"..."}]}
+    created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL                      -- never the API key; that lives in the OS keychain
@@ -184,4 +205,5 @@ CREATE INDEX idx_runs_project         ON simulation_runs(project_id, created_at)
 CREATE INDEX idx_responses_run_q      ON responses(run_id, question_id);
 CREATE INDEX idx_responses_respondent ON responses(respondent_id);
 CREATE INDEX idx_llm_calls_run        ON llm_calls(run_id);
+CREATE INDEX idx_syntheses_run         ON syntheses(run_id, created_at);
 CREATE INDEX idx_themes_run_q         ON themes(run_id, question_id);

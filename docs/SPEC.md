@@ -2,6 +2,8 @@
 
 As of 2026-09-23. Living version: https://claude.ai/code/artifact/2e567b8a-6914-4bf1-8c7f-95994153586f
 
+> **UI and data flow:** the five-step wizard (Survey Info → Personas → Questionnaire → Simulation → Report) and its backend flow are specified in [`DATA_FLOW.md`](DATA_FLOW.md). Where the two documents differ, `DATA_FLOW.md` is newer and wins.
+
 ## 1. Overview
 
 We will build a Windows desktop app that runs market-research surveys against a cohort of LLM-generated synthetic respondents. Everything runs on the user's machine; the only network traffic is HTTPS calls to the Gemini API.
