@@ -6,7 +6,7 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 | Milestone | Wizard steps delivered | Estimate | Status |
 | --- | --- | --- | --- |
-| M1 Skeleton and contracts | Step 1 form (saves locally), shell, stepper | 1 week | 11 of 16 items done |
+| M1 Skeleton and contracts | Step 1 form (saves locally), shell, stepper | 1 week | 12 of 16 items done |
 | M2 Personas | Step 1 → Step 2 end to end | 1.5 weeks | Not started |
 | M3 Questionnaire and Simulation | Steps 3 and 4 | 2.5 weeks | Not started |
 | M4 Report | Step 5 | 1.5 weeks | Not started |
@@ -53,9 +53,10 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 10. [x] CI: core job (fmt, clippy, tests, generated-types check), web job (typecheck, tests, build), Windows job (icons, clippy, `tauri build`, 15 MB installer check, installer artifact).
 11. [x] Live Gemini checks: `crates/core/tests/live_gemini.rs` (ignored by default) lists models and makes a structured call with the newest stable Flash model; a nightly CI job runs them with the `GEMINI_API_KEY` secret. Verified with a real key on `gemini-3.8-flash` (older models such as `gemini-2.5-flash` are closed to new keys, so model IDs are never hard-coded).
 
+12. [x] Windows CI job green: `tauri build` produces the `.msi` and NSIS `.exe`; both pass the 15 MB check (the two together are 6.5 MB zipped).
+
 **Left in M1**
 
-12. First green run of the Windows CI job (installers under 15 MB). The compile errors found on the first run are fixed and the shell now builds locally.
 13. Settings screen: enter, test and delete the Gemini key; model IDs (Flash for personas and answers, Pro for drafting, critic, themes, synthesis and judging); Gemini usage tier; price table. First launch opens it when no key is stored.
 14. Autosave Step 1 on blur (`save_survey_info`), and reopen a project at `projects.wizard_step`.
 15. `ScriptedLlm`: in-process fake provider for engine tests (test plan §3).
