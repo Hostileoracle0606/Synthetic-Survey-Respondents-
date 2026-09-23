@@ -3600,6 +3600,7 @@ dependencies = [
  "survey-core",
  "tauri",
  "tauri-build",
+ "tokio",
 ]
 
 [[package]]

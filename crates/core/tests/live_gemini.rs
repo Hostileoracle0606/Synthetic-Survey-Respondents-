@@ -11,25 +11,13 @@ fn client() -> GeminiClient {
     GeminiClient::new(key)
 }
 
-/// Picks `GEMINI_MODEL`, else the newest stable plain Flash model (`gemini-<version>-flash`).
-/// Older models can be closed to new keys, so never hard-code one.
+/// Picks `GEMINI_MODEL`, else the newest stable Flash model the key can use.
 async fn pick_model(c: &GeminiClient) -> String {
     if let Ok(m) = std::env::var("GEMINI_MODEL") {
         return m;
     }
     let models = c.list_models().await.expect("list_models");
-    models
-        .iter()
-        .filter_map(|m| {
-            let version = m.strip_prefix("gemini-")?.strip_suffix("-flash")?;
-            let parts: Vec<u32> = version
-                .split('.')
-                .map(|p| p.parse().ok())
-                .collect::<Option<_>>()?;
-            Some((parts, m.clone()))
-        })
-        .max()
-        .map(|(_, m)| m)
+    survey_core::llm::gemini::newest_stable_flash(&models)
         .expect("no stable flash model available to this key")
 }
 

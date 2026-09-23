@@ -350,3 +350,45 @@ mod tests {
         );
     }
 }
+
+/// Picks the newest stable plain Flash model (`gemini-<version>-flash`) from `list_models`.
+/// Older models can be closed to new keys, so model IDs are never hard-coded.
+pub fn newest_stable_flash(models: &[String]) -> Option<String> {
+    models
+        .iter()
+        .filter_map(|m| {
+            let version = m.strip_prefix("gemini-")?.strip_suffix("-flash")?;
+            let parts: Vec<u32> = version
+                .split('.')
+                .map(|p| p.parse().ok())
+                .collect::<Option<_>>()?;
+            Some((parts, m.clone()))
+        })
+        .max()
+        .map(|(_, m)| m)
+}
+
+#[cfg(test)]
+mod pick_tests {
+    use super::newest_stable_flash;
+
+    #[test]
+    fn picks_the_highest_plain_flash_version() {
+        let models: Vec<String> = [
+            "gemini-2.5-flash",
+            "gemini-3.8-flash",
+            "gemini-3.10-flash-lite",
+            "gemini-3.9-flash-preview",
+            "gemini-3.7-flash",
+            "gemini-3.1-pro",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(
+            newest_stable_flash(&models).as_deref(),
+            Some("gemini-3.8-flash")
+        );
+        assert_eq!(newest_stable_flash(&[]), None);
+    }
+}

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
-import { defaultQuotaGroups } from "../../lib/quota";
 import { useWizard } from "../../store/wizard";
 import type { CountryOption } from "../../types/gen/CountryOption";
 import type { ResearchType } from "../../types/gen/ResearchType";
@@ -23,7 +22,7 @@ const CATEGORIES = [
 
 /** Step 1. Gate and fields follow docs/DATA_FLOW.md §3 (Step 1). */
 export function SurveyInfoStep() {
-  const { info, cohort, projectId, setInfo, setCohort, setProjectId } = useWizard();
+  const { info, cohort, projectId, setInfo, setCohort, setProjectId, setCurrentCohort, setProgress, reach } = useWizard();
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [status, setStatus] = useState<string>("");
 
@@ -31,12 +30,21 @@ export function SurveyInfoStep() {
     api.listCountries().then(setCountries).catch((e) => setStatus(errorMessage(e)));
   }, []);
 
-  const selected = useMemo(() => countries.filter((c) => info.countries.includes(c.code)), [countries, info.countries]);
   const selectionKey = info.countries.join(",");
   useEffect(() => {
-    // Quota groups follow the country selection.
-    setCohort({ quotas: defaultQuotaGroups(selected) });
-  }, [selectionKey, countries.length]);
+    // Quota groups follow the country selection; census shares where the country has a table.
+    let live = true;
+    api.defaultQuotas(info.countries).then((quotas) => live && setCohort({ quotas })).catch((e) => setStatus(errorMessage(e)));
+    return () => {
+      live = false;
+    };
+  }, [selectionKey]);
+  const censusNote = useMemo(() => {
+    const selected = countries.filter((c) => info.countries.includes(c.code));
+    if (selected.length === 1 && selected[0].hasCensusTable) return "Defaults match the adult population of this country (census data). Edit them to target a different audience.";
+    if (selected.some((c) => !c.hasCensusTable)) return "No census table for some countries: people are drawn from these quotas only.";
+    return "";
+  }, [countries, selectionKey]);
 
   const groupsOk = cohort.quotas.every((g) => g.rows.reduce((a, r) => a + r.percent, 0) === 100);
   const missing = [!info.researchType && "research type", info.countries.length === 0 && "a country", !info.title.trim() && "a project title"].filter(Boolean);
@@ -48,8 +56,11 @@ export function SurveyInfoStep() {
     try {
       const project = await api.saveSurveyInfo(projectId, info);
       setProjectId(project.id);
-      await api.generateCohort(project.id, cohort);
+      setProgress({ done: 0, total: cohort.size, replaced: 0 });
+      const started = await api.generateCohort(project.id, cohort, setProgress);
+      setCurrentCohort(started);
       setStatus("");
+      reach(1);
     } catch (e) {
       setStatus(errorMessage(e));
     }
@@ -117,6 +128,7 @@ export function SurveyInfoStep() {
         <label htmlFor="size-exact" className="sr-only">Exact number of respondents</label>
         <input id="size-exact" type="number" min={1} max={1000} value={cohort.size} onChange={(e) => setCohort({ size: Math.max(1, Math.min(1000, Number(e.target.value) || 1)) })} className="h-11 w-28 rounded-full border border-line text-center" />
       </div>
+      {censusNote && <Help>{censusNote}</Help>}
       <QuotaEditor size={cohort.size} groups={cohort.quotas} onChange={(quotas) => setCohort({ quotas })} />
       <div className="flex flex-col gap-2">
         <Label htmlFor="screening">Screening Criteria</Label>

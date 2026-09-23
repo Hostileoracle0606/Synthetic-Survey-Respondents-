@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
+import { api } from "./lib/api";
 import { useWizard } from "./store/wizard";
+import { KeyPrompt } from "./components/KeyPrompt";
 import { SurveyInfoStep } from "./features/survey-info/SurveyInfoStep";
 import { PersonasStep } from "./features/personas/PersonasStep";
 import { QuestionnaireStep } from "./features/questionnaire/QuestionnaireStep";
@@ -9,6 +12,15 @@ const SCREENS = [SurveyInfoStep, PersonasStep, QuestionnaireStep, SimulationStep
 
 export default function App() {
   const step = useWizard((s) => s.step);
+  const [needsKey, setNeedsKey] = useState(false);
+  useEffect(() => {
+    api.hasApiKey().then((has) => setNeedsKey(!has)).catch(() => setNeedsKey(true));
+  }, []);
   const Screen = SCREENS[step];
-  return <Screen />;
+  return (
+    <>
+      <Screen />
+      {needsKey && <KeyPrompt onDone={() => setNeedsKey(false)} />}
+    </>
+  );
 }
