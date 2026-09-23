@@ -44,9 +44,11 @@ CREATE TABLE respondents (
         -- product-category facts, e.g. {"current_device_age_years":2,"current_brand":"[Brand A]","upgrade_trigger":"battery"}
     screen_status         TEXT NOT NULL DEFAULT 'passed'
                           CHECK (screen_status IN ('passed','failed','flagged')),
-    created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    UNIQUE (cohort_id, ordinal)
+    created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+-- A persona that fails screening is kept (screen_status = 'failed') and its replacement
+-- takes the same ordinal, so ordinals are unique only among people in the cohort.
+CREATE UNIQUE INDEX idx_respondents_ordinal ON respondents(cohort_id, ordinal) WHERE screen_status <> 'failed';
 
 CREATE TABLE surveys (
     id          INTEGER PRIMARY KEY,

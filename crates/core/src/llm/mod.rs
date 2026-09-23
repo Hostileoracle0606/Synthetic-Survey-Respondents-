@@ -1,6 +1,7 @@
 //! LLM provider layer. v1 ships one adapter, for Gemini (see docs/SPEC.md §5).
 
 pub mod gemini;
+pub mod scripted;
 
 use std::time::Duration;
 

@@ -191,3 +191,127 @@ pub enum RunProgress {
         status: RunStatus,
     },
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CohortStatus {
+    Draft,
+    Generating,
+    Ready,
+    Locked,
+    Failed,
+}
+
+impl CohortStatus {
+    pub fn as_db(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Generating => "generating",
+            Self::Ready => "ready",
+            Self::Locked => "locked",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Self {
+        match s {
+            "generating" => Self::Generating,
+            "ready" => Self::Ready,
+            "locked" => Self::Locked,
+            "failed" => Self::Failed,
+            _ => Self::Draft,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Cohort {
+    #[ts(type = "number")]
+    pub id: i64,
+    #[ts(type = "number")]
+    pub project_id: i64,
+    pub name: String,
+    pub status: CohortStatus,
+    pub config: CohortConfig,
+    /// Set when the job failed, e.g. an invalid key.
+    pub error: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Share {
+    pub label: String,
+    pub percent: f64,
+}
+
+/// The five Step 2 cards.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CohortSummary {
+    pub status: CohortStatus,
+    pub respondents: u32,
+    pub average_age: Option<f64>,
+    pub gender: Vec<Share>,
+    /// Most common value of the product category's main field, e.g. the upgrade trigger.
+    pub top_trigger: Option<Share>,
+    pub top_trigger_label: String,
+    pub replaced_at_screening: u32,
+}
+
+/// One card in the Step 2 grid.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RespondentCard {
+    #[ts(type = "number")]
+    pub id: i64,
+    pub ordinal: u32,
+    pub name: String,
+    pub age: u32,
+    pub gender: String,
+    pub occupation: String,
+    pub biases: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RespondentPage {
+    pub items: Vec<RespondentCard>,
+    pub total: u32,
+}
+
+/// Everything the Step 2 drawer shows.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RespondentDetail {
+    #[ts(type = "number")]
+    pub id: i64,
+    pub ordinal: u32,
+    pub name: String,
+    pub age: u32,
+    pub gender: String,
+    pub country: String,
+    pub region: String,
+    pub income: String,
+    pub occupation: String,
+    pub summary: String,
+    pub values: Vec<String>,
+    pub habits: String,
+    pub media_habits: String,
+    pub brand_loyalties: String,
+    pub category_attitudes: String,
+    pub price_sensitivity: u8,
+    pub biases: Vec<String>,
+    /// Category facts as label/value pairs, ready to display.
+    pub category_facts: Vec<(String, String)>,
+    pub screen_status: String,
+    pub screen_reason: String,
+}

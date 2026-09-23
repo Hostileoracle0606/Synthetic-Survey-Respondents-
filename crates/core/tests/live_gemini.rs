@@ -84,3 +84,60 @@ async fn live_structured_output() {
         resp.json, resp.latency_ms, resp.usage
     );
 }
+
+#[tokio::test]
+#[ignore = "calls the live Gemini API"]
+async fn live_persona_batch() {
+    use survey_core::engine::persona::{build_request, parse_reply, BatchInput};
+    use survey_core::model::{CohortConfig, QuotaGroup, QuotaRow};
+    use survey_core::sampling::Sampler;
+
+    let c = client();
+    let model = pick_model(&c).await;
+    let cfg = CohortConfig {
+        size: 4,
+        seed: 2026,
+        quotas: vec![QuotaGroup {
+            key: "age".into(),
+            label: "Age".into(),
+            rows: vec![
+                QuotaRow {
+                    label: "18–29".into(),
+                    percent: 50,
+                },
+                QuotaRow {
+                    label: "60+".into(),
+                    percent: 50,
+                },
+            ],
+        }],
+        screening: String::new(),
+    };
+    let skeletons = Sampler::new(&cfg, &["US".into()]).unwrap().draw().unwrap();
+    let req = build_request(
+        &model,
+        &BatchInput {
+            skeletons: &skeletons,
+            category: Some("mobile_phone"),
+            screening: "Owns a smartphone.",
+            already_written: &[],
+        },
+    );
+    let resp = c
+        .complete_structured(&req)
+        .await
+        .expect("persona call succeeds");
+    let ordinals: Vec<u32> = skeletons.iter().map(|s| s.ordinal).collect();
+    let personas =
+        parse_reply(&resp.json, &ordinals, Some("mobile_phone")).expect("reply passes checks");
+    for p in &personas {
+        eprintln!(
+            "{} — {} | trigger {:?} | screen {}",
+            p.name,
+            p.summary.chars().take(90).collect::<String>(),
+            p.category_profile.get("upgrade_trigger"),
+            p.passes_screen
+        );
+    }
+    eprintln!("usage {:?}, {} ms", resp.usage, resp.latency_ms);
+}

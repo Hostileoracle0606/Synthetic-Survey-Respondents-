@@ -1,5 +1,10 @@
-//! Quota maths. Head counts must add up to the sample size exactly, so every group is
-//! apportioned with the largest-remainder method. Skeleton sampling and raking land in M2.
+//! Who is in the cohort. Head counts must add up to the sample size exactly, so every
+//! group is apportioned with the largest-remainder method; `skeleton` draws the people.
+
+pub mod population;
+pub mod skeleton;
+
+pub use skeleton::{census_default_quotas, Sampler, Skeleton};
 
 use crate::error::{AppError, AppResult};
 use crate::model::CohortConfig;
@@ -138,5 +143,100 @@ mod tests {
             validate(&c).unwrap_err().code,
             crate::ErrorCode::InvalidInput
         );
+    }
+}
+
+/// Step 1 default quota groups for a country selection (docs/DATA_FLOW.md, Step 1):
+/// census shares for one census country; generic shares otherwise, plus an even Country
+/// group when several countries are selected.
+pub fn default_quotas(country_codes: &[String]) -> Vec<crate::model::QuotaGroup> {
+    use crate::model::{QuotaGroup, QuotaRow};
+    if let [only] = country_codes {
+        if let Some(groups) = census_default_quotas(only) {
+            return groups;
+        }
+    }
+    let rows = |pairs: &[(&str, u32)]| -> Vec<QuotaRow> {
+        pairs
+            .iter()
+            .map(|(l, p)| QuotaRow {
+                label: l.to_string(),
+                percent: *p,
+            })
+            .collect()
+    };
+    let mut groups = Vec::new();
+    if country_codes.len() > 1 {
+        let names: Vec<String> = country_codes
+            .iter()
+            .map(|c| crate::countries::find(c).map_or_else(|| c.clone(), |o| o.name.clone()))
+            .collect();
+        let n = names.len() as u32;
+        let base = 100 / n;
+        groups.push(QuotaGroup {
+            key: "country".into(),
+            label: "Country".into(),
+            rows: names
+                .into_iter()
+                .enumerate()
+                .map(|(i, label)| QuotaRow {
+                    label,
+                    percent: base + if i == 0 { 100 - base * n } else { 0 },
+                })
+                .collect(),
+        });
+    }
+    groups.push(QuotaGroup {
+        key: "age".into(),
+        label: "Age".into(),
+        rows: rows(&[("18–29", 25), ("30–44", 30), ("45–59", 25), ("60+", 20)]),
+    });
+    if let [only] = country_codes {
+        if let Some(c) = crate::countries::find(only) {
+            if !c.regions.is_empty() {
+                let n = c.regions.len() as u32;
+                let base = 100 / n;
+                groups.push(QuotaGroup {
+                    key: "region".into(),
+                    label: "Region".into(),
+                    rows: c
+                        .regions
+                        .iter()
+                        .enumerate()
+                        .map(|(i, r)| QuotaRow {
+                            label: r.clone(),
+                            percent: base + if i == 0 { 100 - base * n } else { 0 },
+                        })
+                        .collect(),
+                });
+            }
+        }
+    }
+    groups.push(QuotaGroup {
+        key: "income".into(),
+        label: "Household income".into(),
+        rows: rows(&[("Under $50k", 30), ("$50k–$100k", 40), ("Over $100k", 30)]),
+    });
+    groups
+}
+
+#[cfg(test)]
+mod default_tests {
+    use super::*;
+
+    #[test]
+    fn defaults_follow_the_country_selection() {
+        let keys = |c: &[&str]| -> Vec<String> {
+            default_quotas(&c.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+                .into_iter()
+                .map(|g| g.key)
+                .collect()
+        };
+        assert_eq!(keys(&["US"]), ["age", "region", "income"]);
+        assert_eq!(keys(&["CA"]), ["age", "income"]);
+        assert_eq!(keys(&["US", "CA", "GB"]), ["country", "age", "income"]);
+        for g in default_quotas(&["US".into(), "CA".into(), "GB".into()]) {
+            assert_eq!(g.rows.iter().map(|r| r.percent).sum::<u32>(), 100);
+        }
     }
 }

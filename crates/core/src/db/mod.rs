@@ -1,6 +1,7 @@
 //! SQLite storage. The schema lives in `docs/schema.sql` and is the first migration.
 //! Every connection gets the same PRAGMAs; all writes go through [`writer::Writer`].
 
+pub mod cohorts;
 pub mod projects;
 pub mod writer;
 
