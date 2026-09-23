@@ -15,27 +15,28 @@ Every success metric in the spec maps to at least one suite below, and every sui
 | SM5 | 30% HTTP 429 still completes, with reduced concurrency (§4, §11) | 100% complete; concurrency halved within 60 s | S4, S5 |
 | SM6 | Every stored answer is valid for its question (§4) | 100% `valid` or explicitly `invalid` with reason | S3, S4 |
 | SM7 | UI 60 fps while streaming 1,000 respondents (§11) | ≥ 95% frames < 16.7 ms; no long task > 100 ms | S10 |
-| SM8 | Memory < 150 MB with a 1,000-respondent project (§1) | Peak working set, see §5 note | S7 |
+| SM8 | Memory with a 1,000-respondent project (§1) | Rust process ≤ 50 MB; WebView2 renderer ≤ 100 MB (peak working set) | S7 |
 | SM9 | Installer < 15 MB (§1, §10) | < 15 MB | S14 |
 | SM10 | API key never in DB, logs or exports (§10, §11) | 0 matches | S8 |
 | SM11 | Only the configured LLM endpoint is contacted (§1, §10) | 0 other hosts | S8 |
 | SM12 | Results are reproducible and traceable (§1, §6) | Every response links to run, model, prompt version, call | S2, S6 |
 | SM13 | Charts and exports are correct (§9) | Match golden fixtures exactly | S11 |
 | SM14 | Personas stay in character, avoid stereotypes, resist injection (§8) | ≥ baseline pass rate − 3 pts; stereotyping ≤ 2% | S12 |
-| SM15 | Synthetic answers are measurably realistic (§8) | Agreement score reported; no drop > 5 pts vs last release | S13 |
+| SM15 | Persona attributes measurably drive answers (fidelity, §8) | Fidelity score reported; no drop > 5 pts vs last release | S13 |
 | SM16 | Frontend and backend stay in contract (§7) | Generated bindings unchanged in CI | S9 |
-| SM17 | Installs and runs on clean Windows 10 and 11 (§1, §10) | Install → launch → uninstall succeed | S14 |
+| SM17 | Installs and runs on clean Windows 11 (and Windows 10 while it stays a target) (§1, §10) | Install → launch → uninstall succeed | S14 |
+| SM18 | Every LLM feature works on Gemini (§1, §5) | All live checks pass on the default Flash and Pro models | S3, S12, S13 |
 
 ## 2. CI tiers
 
 | Tier | Trigger | Network | Time budget | Suites |
 |---|---|---|---|---|
 | PR | Every push | None (mocks only) | < 10 min | S1–S6, S8 (static + mock), S9, S10 unit, S11 |
-| Nightly | Schedule, `main` | Live LLM API, cost cap $5/night | < 60 min | S3 live, S7 throughput, S10 E2E, S12 |
+| Nightly | Schedule, `main` | Live Gemini API, cost cap $5/night | < 60 min | S3 live, S7 throughput, S10 E2E, S12 |
 | Prompt change | Any change under `src-tauri/prompts/` | Live | < 30 min | S12, S13 smoke |
-| Release | Tag | Live | < 3 h | All, incl. S7 on reference hardware, S13 full, S14 |
+| Release | Tag | Live | < 3 h | All, incl. S7, S10 fps, S13 full and S14 on the Windows VMs (§6) |
 
-PR-tier tests must never call a real API. A test that needs the network is marked `#[ignore]` and runs in nightly with `cargo nextest run --run-ignored only`.
+Live tiers read the Gemini key from the `GEMINI_API_KEY` GitHub Actions secret. PR-tier tests must never call a real API, and PR jobs never receive the secret. A test that needs the network is marked `#[ignore]` and runs in nightly with `cargo nextest run --run-ignored only`.
 
 ## 3. Shared test infrastructure (built in M1)
 
@@ -46,7 +47,7 @@ PR-tier tests must never call a real API. A test that needs the network is marke
 - Records every request so tests can assert on prompts, order and concurrency.
 - **Persona-derived answers:** the answer for a choice question is `hash(persona_id, question_code) mod options`. Distributions are then non-trivial and known in advance, so analytics tests have exact expected values.
 
-**`MockLlmServer`** — a `wiremock` HTTP server for adapter tests. It serves recorded real responses from each provider (`tests/fixtures/<provider>/*.json`) plus error bodies, `Retry-After` headers, truncated bodies and slow streams.
+**`MockLlmServer`** — a `wiremock` HTTP server for adapter tests. It serves recorded real Gemini `generateContent` responses (`tests/fixtures/gemini/*.json`) plus error bodies, `Retry-After` headers, truncated bodies and slow streams.
 
 **Fixtures**
 
@@ -93,22 +94,23 @@ Covers SM4, SM12.
 | `readers_during_writes` | Concurrent reads during a 10,000-row write never return `SQLITE_BUSY` |
 | `traceability` | Every `responses` row has a non-null `run_id`, and its run has model, prompt version and seed |
 
-### S3 — LLM provider adapters (Rust, PR with mocks; nightly live)
+### S3 — Gemini adapter (Rust, PR with mocks; nightly live)
 
-Covers SM6.
-
-Run the same conformance suite against each adapter (OpenAI-compatible, Anthropic, Gemini).
+Covers SM6, SM18.
 
 | Test | Asserts |
 |---|---|
 | `structured_output_roundtrip` | A recorded valid response parses into the target struct |
-| `request_shape` | Outgoing request contains the schema in the provider's expected field (`response_format`, tool `input_schema`, `responseSchema`) |
-| `usage_parsed` | Input, cached and output tokens are read from each provider's usage fields |
-| `error_classification` | 429 → `RateLimited` with parsed `Retry-After`; 500/502/503 → `Transient`; 400 → `InvalidRequest`; 401/403 → `Auth`; unparseable JSON → `SchemaViolation` |
+| `request_shape` | Outgoing request sets `generationConfig.responseMimeType = "application/json"` and carries the generated schema |
+| `schema_subset` | Every schema the app sends (persona, each answer mode, critic, themes, judge) uses only Gemini-supported JSON Schema features: no `anyOf`, nesting depth ≤ 4 |
+| `usage_parsed` | Input, cached and output tokens are read from the usage metadata |
+| `error_classification` | 429 `RESOURCE_EXHAUSTED` → `RateLimited` with parsed retry delay; 500/503 → `Transient`; 400 → `InvalidRequest`; 401/403 → `Auth`; unparseable JSON → `SchemaViolation` |
+| `safety_block` | A response blocked by Gemini safety filters (no candidates, block reason set) becomes a typed error and the answer is stored as `refused` |
 | `timeout` | A response slower than the configured timeout becomes `Transient` |
-| `cache_control_prefix` (Anthropic) | The shared prefix carries `cache_control`; persona text comes after it |
+| `logprobs_probe` | `test_connection` sets `Capabilities.logprobs` from a probe call; with it false, the log-probability option is hidden |
 | `no_key_in_error` | Error messages and `Debug` output never contain the API key |
-| **Live (nightly):** `live_persona_batch`, `live_whole_survey` | One real call per adapter returns schema-valid output; records latency and tokens to the nightly report |
+| **Live (nightly):** `live_persona_batch`, `live_whole_survey`, `live_conversational`, `live_critic`, `live_themes` | One real call per feature on the default Flash and Pro models returns schema-valid output; records latency, tokens and cached tokens to the nightly report |
+| **Live (nightly):** `live_cache_hit` | Two `whole_survey` calls with the same survey prefix, sent back to back: the second reports cached tokens > 0 if the prefix is above the model's minimum; otherwise the report says caching does not apply |
 
 ### S4 — Engine resilience (Rust integration with `ScriptedLlm`, PR)
 
@@ -141,6 +143,7 @@ Covers SM5.
 |---|---|
 | `rpm_respected` | With RPM 60, 120 acquisitions take ≥ 60 s of simulated time |
 | `tpm_respected` | With TPM 10,000 and 1,000-token calls, ≤ 10 calls start per minute |
+| `rpd_budget` | With RPD 100 and 150 queued calls, the run pauses after 100 with the reset time, and resumes when the day rolls over (simulated) |
 | `tpm_correction` | Actual usage higher than estimated reduces remaining capacity |
 | `retry_after_honoured` | Next attempt waits ≥ `Retry-After` |
 | `backoff_bounds` | Delays grow exponentially from 1 s, capped at 60 s, with jitter within ±20% |
@@ -166,12 +169,14 @@ Covers SM3, SM8.
 | Test | Setup | Threshold |
 |---|---|---|
 | `throughput_mock` (nightly) | `ScriptedLlm` with latency drawn from a log-normal (median 8 s, p95 20 s), 100 × 20, concurrency 10, real clock | < 180 s; engine overhead (wall time − ideal time) < 5% |
-| `throughput_live` (release) | Real default model, 100 × 20, concurrency 10 | < 180 s, recorded with model and date; warn only, since provider speed varies |
-| `memory_1000` (release) | Windows reference machine, open a project with 1,000 respondents × 20 answers, browse all screens | Peak working set < 150 MB (see note) |
+| `throughput_live` (release) | Default Gemini Flash model, 100 × 20, concurrency 10 (or lower if the project's tier requires) | < 180 s, recorded with model, tier and date; warn only, since provider speed varies |
+| `memory_1000` (release) | Windows 11 VM (§6), open a project with 1,000 respondents × 20 answers, browse all screens | Rust process ≤ 50 MB; WebView2 renderer process ≤ 100 MB (peak working set, sampled every 500 ms) |
 | `db_query_latency` (nightly) | 1,000 × 50 answers | `get_distribution` < 50 ms; `get_crosstab` < 200 ms; `list_responses` page < 50 ms |
 | `export_speed` (nightly) | 1,000 × 50 answers to CSV | < 2 s |
 
-**Note on SM8:** WebView2 runs in separate processes. Measure the Rust process and the WebView2 renderer process separately, and agree before M1 whether the 150 MB budget covers both. Suggested split: Rust ≤ 50 MB, renderer ≤ 100 MB.
+WebView2 also starts browser, GPU and utility processes. They are recorded in the report but not counted against SM8, because their size depends on the WebView2 runtime, not on this app.
+
+Performance tests on VMs are noisy: each runs 3 times and the median is compared with the threshold.
 
 ### S8 — Security and privacy (PR + release)
 
@@ -223,7 +228,7 @@ Run the real app with the Rust backend pointed at `MockLlmServer`. Connect Playw
 | Survey | Add one question of each type → critique panel shows issues → save |
 | Run | Estimate shown → start → progress reaches 100% → pause/resume/cancel buttons work |
 | Results | Charts render; cross-tab by gender; theme coding; export CSV |
-| `stream_fps_1000` | Stream 1,000 respondents from the mock at the maximum batch rate while recording a CDP performance trace: ≥ 95% of frames < 16.7 ms, no long task > 100 ms |
+| `stream_fps_1000` | Stream 1,000 respondents from the mock at the maximum batch rate while recording a CDP performance trace: ≥ 95% of frames < 16.7 ms, no long task > 100 ms. Runs on the GPU-backed release VM (§6); on VMs without a GPU it runs warn-only |
 
 ### S11 — Analytics and exports (Rust + Vitest, PR)
 
@@ -254,23 +259,37 @@ Covers SM14. Implemented in an `evals/` Rust crate on the harness's own `LlmProv
 | Survey critic | 40 questions with labelled defects (leading, double-barrelled, loaded) + 20 clean | Precision and recall of `critique_survey` | Recall ≥ 0.8, precision ≥ 0.7 |
 | Theme coder | 3 open-ended sets with human-coded themes | Theme overlap with human coding | Adjusted Rand index ≥ 0.5 |
 
-Judge rules: use a different model family from the one under test; fix judge temperature at 0; spot-check 10% of judgements by hand each release; store the pass rate against the prompt version in `evals/results.jsonl`.
+Judge rules:
 
-### S13 — Response validity and calibration (statistical; prompt change smoke, release full)
+- All judging uses Gemini. The judge is the Pro-tier model; the respondent under test is the Flash-tier model. A same-family judge can share the respondent's blind spots, so this is weaker than a cross-provider judge.
+- To compensate, a person checks 20% of judgements each release (instead of 10%), and any eval where human and judge disagree on more than 15% of checked cases is marked unreliable until its rubric is fixed.
+- Judge temperature is 0 and the judge prompt is versioned like the app prompts.
+- Pass rates are stored against the prompt version and judge model in `evals/results.jsonl`.
 
-Covers SM15. Uses real models and the benchmark pack (spec §8).
+### S13 — Fidelity and response validity (statistical; prompt change smoke, release full)
+
+Covers SM15, SM18. Uses the default Gemini models and the frozen AI-generated benchmark pack `benchmarks/fidelity.v1.json` (spec §8).
+
+**What the pack tests.** Each benchmark question is tied to one persona attribute, with a written rule for the expected answer. The expected distribution is computed from the cohort's own persona attributes, so the ground truth is exact and comes from no LLM. This measures whether the harness carries persona attributes through to answers (fidelity). It does not measure whether answers match real people (realism), and the report says so.
+
+**Building the pack (once, in M5)**
+
+1. `tools/generate-benchmark` asks the Gemini Pro-tier model for 30 candidate questions across choice, Likert and numeric types, each with an attribute and a rule.
+2. A person keeps 20, checking that each rule is unambiguous and that the question does not name the attribute outright (otherwise the test is trivial).
+3. The pack is frozen and versioned. A new version is a deliberate change, reviewed like code, and fidelity scores are only compared within one pack version.
 
 | Check | Method | Threshold |
 |---|---|---|
-| Agreement score | Mean total variation distance to benchmark distributions, scaled to 0–100 | Reported; release blocked if it drops > 5 pts vs the previous release on the same model |
-| Variance | Normalised entropy per choice question vs benchmark | Flag questions where synthetic entropy < 60% of real |
+| Fidelity score | Mean total variation distance between expected and synthetic distributions, scaled to 0–100 | Reported; release blocked if it drops > 5 pts vs the previous release on the same model and pack version |
+| Attribute sensitivity | For each question, the difference in answers between personas high and low on the tied attribute | Significant in the rule's direction (two-proportion or Mann-Whitney test, p < 0.05) for ≥ 80% of questions |
+| Variance | Normalised entropy per choice question | Flag questions below 0.4 (answers collapsed onto one option) |
 | Midpoint rate | Share choosing the Likert midpoint | Flag > 60% |
-| Order effect | Compare first-position vs last-position selection rates across shuffles | Difference < 5 pts (two-proportion test, p > 0.05) |
-| Subgroup gaps | Agreement per demographic subgroup | Report the 3 worst; flag any subgroup 15 pts below overall |
+| Order effect | First-position vs last-position selection rates across shuffles | Difference < 5 pts (two-proportion test, p > 0.05) |
+| Subgroup gaps | Fidelity per demographic subgroup | Report the 3 worst; flag any subgroup 15 pts below overall |
 | Run-to-run stability | Same cohort and survey, 3 seeds | Per-question TVD between seeds < 0.1 |
-| Model comparison | Default model vs one alternative | Reported side by side; informs the default choice |
+| Model comparison | Default Flash model vs one other Gemini model | Reported side by side; informs the default model choice |
 
-Smoke version on prompt change: 5 benchmark questions × 100 respondents, only agreement score and midpoint rate.
+Smoke version on prompt change: 5 benchmark questions × 100 respondents; fidelity score, attribute sensitivity and midpoint rate only.
 
 ### S14 — Packaging and install (PR size check; release install)
 
@@ -280,8 +299,8 @@ Covers SM9, SM17.
 |---|---|---|
 | `installer_size` | PR | Built `.msi` and `.exe` each < 15 MB; Rust binary ≤ 8 MB; frontend bundle ≤ 2 MB gzipped |
 | `size_regression` | PR | Warn when the installer grows > 500 KB vs `main` |
-| `clean_install_win11` | Release | Fresh Windows 11 VM: install, launch, create project, uninstall; no files left except user data |
-| `clean_install_win10_no_webview2` | Release | Windows 10 VM without WebView2: bootstrapper installs it, then the app launches |
+| `clean_install_win11` | Release | Windows 11 VM restored to its clean snapshot (§6): install, launch, create project, uninstall; no files left except user data |
+| `clean_install_win10_no_webview2` | Release, only while Windows 10 stays a target (spec §11) | Windows 10 VM without WebView2: bootstrapper installs it, then the app launches |
 | `signature_valid` | Release | `signtool verify /pa` passes for both installers |
 | `upgrade_keeps_data` | Release | Install vN, create data, install vN+1: migrations run and data is intact |
 
@@ -297,9 +316,36 @@ Covers SM9, SM17.
 | S12 | M3 (first prompts) → M5 | Rust |
 | S13, S14 release, S7 memory, S8 egress | M5 | Both |
 
-## 6. Open decisions
+## 6. Windows VM environment
 
-- [ ] Does the 150 MB memory budget include the WebView2 renderer (see S7 note)?
-- [ ] Which judge model for S12, and what monthly budget for nightly live tests ($5/night assumed)?
-- [ ] Which benchmark questions and sources make up the calibration pack for S13?
-- [ ] Is a Windows reference machine available for release-tier performance tests, or do we use a fixed-size cloud VM?
+Release-tier tests run on Windows VMs, not physical machines. GitHub's `windows-latest` runners run Windows Server, so they cover build and PR tests but not clean installs on a desktop Windows edition.
+
+| VM | Image | Size | Used by |
+|---|---|---|---|
+| `win11-perf` | Windows 11 Pro, current release, WebView2 preinstalled | 4 vCPU, 16 GB RAM, with a GPU (for example an Azure NV-series VM) | S7 memory and throughput, S10 `stream_fps_1000`, S13 |
+| `win11-clean` | Windows 11 Pro, no app data, updates frozen | 2 vCPU, 8 GB RAM | S14 install, upgrade and signature tests, S8 `network_egress` |
+| `win10-clean` | Windows 10 22H2 without WebView2 | 2 vCPU, 8 GB RAM | S14 `clean_install_win10_no_webview2`, only while Windows 10 is a target |
+
+**How they run**
+
+- Each VM is registered as a GitHub Actions self-hosted runner with labels `win11-perf`, `win11-clean` and `win10-clean`. Release jobs select them by label.
+- Before each release job, a pipeline step restores the VM to its clean snapshot, so no state carries over between runs.
+- VMs are started for release runs and stopped afterwards to limit cost.
+- `GEMINI_API_KEY` reaches the VM only as a job secret; the snapshot never contains it.
+- `network_egress` captures traffic on the VM (for example with `pktmon`) and checks that only `generativelanguage.googleapis.com` and update or signing endpoints used by Windows itself are contacted.
+- The VM size and GPU are fixed and recorded with every performance result, so results stay comparable between releases.
+
+## 7. Open decisions
+
+**Decided (2026-09-23)**
+
+- Memory is split: Rust ≤ 50 MB, WebView2 renderer ≤ 100 MB.
+- Gemini is used for every LLM feature, including the S12 judge (Pro tier judging Flash tier).
+- The S13 benchmark pack is AI-generated with planted ground truth, and measures fidelity, not realism.
+- Release-tier tests run on Windows VMs (§6).
+
+**Still open**
+
+- [ ] Monthly budget for live tests: $5/night nightly plus release runs is assumed (about $150–200/month).
+- [ ] Which cloud hosts the VMs (Azure is assumed, because it has Windows 11 desktop images and GPU sizes)?
+- [ ] Which Gemini usage tier is the test project on? It sets safe concurrency for live tests.

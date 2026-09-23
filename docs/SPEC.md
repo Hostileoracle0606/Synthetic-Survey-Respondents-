@@ -4,7 +4,7 @@ As of 2026-09-23. Living version: https://claude.ai/code/artifact/2e567b8a-6914-
 
 ## 1. Overview
 
-We will build a Windows desktop app that runs market-research surveys against a cohort of LLM-generated synthetic respondents. Everything runs on the user's machine; the only network traffic is HTTPS calls to a cloud LLM API.
+We will build a Windows desktop app that runs market-research surveys against a cohort of LLM-generated synthetic respondents. Everything runs on the user's machine; the only network traffic is HTTPS calls to the Gemini API.
 
 **Goals**
 
@@ -15,7 +15,8 @@ We will build a Windows desktop app that runs market-research surveys against a 
 
 **Non-goals**
 
-- Running LLMs locally. An OpenAI-compatible base URL is supported, so a user may point at Ollama, but we ship no model.
+- Running LLMs locally. We ship no model.
+- Providers other than Gemini in v1. The provider trait keeps other adapters possible later.
 - Any hosted backend, user accounts, cloud sync or telemetry.
 - Replacing real respondents. The app is for early-stage directional testing, and says so in the UI.
 
@@ -27,7 +28,8 @@ We will build a Windows desktop app that runs market-research surveys against a 
 | Installer size | < 15 MB |
 | Backend | Local only: Rust process + embedded SQLite; no server, no Python runtime |
 | Network | Outbound HTTPS to the configured LLM endpoint only |
-| Idle memory | < 150 MB with a 1,000-respondent project open |
+| LLM provider | Google Gemini API for every LLM feature (personas, answers, critic, theme coding, evals) |
+| Memory | Rust process ≤ 50 MB and WebView2 renderer ≤ 100 MB, with a 1,000-respondent project open |
 
 ## 2. Architecture
 
@@ -37,9 +39,9 @@ The app is a Tauri v2 shell: a React UI in WebView2 talks to a Rust core over ty
 flowchart LR
   UI[React UI<br/>WebView2] -- commands --> CMD[Tauri commands]
   CMD --> ENG[Simulation engine<br/>tokio workers]
-  ENG --> LIM[Rate limiter<br/>RPM + TPM]
+  ENG --> LIM[Rate limiter<br/>RPM + TPM + RPD]
   LIM --> LLM[LLM provider layer]
-  LLM -- HTTPS --> API[(Cloud LLM API)]
+  LLM -- HTTPS --> API[(Gemini API)]
   ENG --> W[DB writer task]
   W --> DB[(SQLite WAL)]
   ENG -- Channel batches --> UI
@@ -56,9 +58,9 @@ The UI never sees the API key and never runs SQL; it only calls commands and rec
 | IPC types | `tauri-specta` | Generates TypeScript bindings from Rust command signatures |
 | Async | `tokio` | Worker pool, cancellation, channels |
 | HTTP | `reqwest` (rustls) | Avoids OpenSSL on Windows |
-| LLM clients | Own thin trait over `reqwest`; evaluate `genai` or `rig-core` | Few endpoints needed; keeps binary small |
+| LLM client | Own thin Gemini adapter over `reqwest`, behind the `LlmProvider` trait | One provider in v1; keeps binary small |
 | JSON schema | `serde`, `schemars` | Persona and answer schemas generated from Rust structs |
-| Rate limiting | `governor` | Token buckets for requests and tokens per minute |
+| Rate limiting | `governor` | Token buckets for requests per minute, tokens per minute and requests per day |
 | Retries | `backoff` | Exponential backoff with jitter |
 | Database | `rusqlite` (bundled) + `rusqlite_migration` | Simpler than `sqlx` for one local file |
 | Secrets | `keyring` | Windows Credential Manager |
@@ -131,8 +133,10 @@ stateDiagram-v2
 
 **Rate limiting and retries**
 
-- Two `governor` buckets: requests per minute and tokens per minute, both set per provider profile. Tokens are estimated before the call and corrected afterwards.
-- HTTP 429 and 5xx: exponential backoff from 1 s to 60 s with jitter, honouring `Retry-After`, up to 5 attempts.
+- Three `governor` buckets matching Gemini's quota dimensions: requests per minute (RPM), input tokens per minute (TPM) and requests per day (RPD). Defaults come from the user's selected Gemini usage tier and are editable. Tokens are estimated before the call and corrected afterwards.
+- Gemini limits apply per Google Cloud project, not per key, so two keys from one project share one budget.
+- When the RPD budget would run out mid-run, the run pauses with a message giving the reset time (midnight Pacific).
+- HTTP 429 (`RESOURCE_EXHAUSTED`) and 5xx: exponential backoff from 1 s to 60 s with jitter, honouring `Retry-After`, up to 5 attempts.
 - If more than 20% of calls in a 60 s window return 429, concurrency drops by half and recovers by 1 every 30 s.
 - HTTP 400/401/403: fail fast, pause the run and tell the user.
 
@@ -151,25 +155,32 @@ trait LlmProvider: Send + Sync {
 }
 ```
 
-**Adapters for v1**
+**Gemini adapter (v1)**
 
-| Adapter | Structured output via | Notes |
-| --- | --- | --- |
-| OpenAI-compatible | `response_format: json_schema` | Also covers Azure OpenAI, Ollama, LM Studio, vLLM via base URL |
-| Anthropic | Forced tool call with the schema as `input_schema` | Prompt caching with `cache_control` on the shared prefix |
-| Gemini | `responseSchema` | — |
+v1 ships one adapter, for the Gemini API `generateContent` endpoint. It uses `generateContent` rather than the newer Interactions API because that API currently lacks token log-probabilities.
+
+| Feature | How the adapter uses it |
+| --- | --- |
+| Structured output | `generationConfig.responseMimeType = "application/json"` plus a JSON schema generated by `schemars`. Schemas stay flat and avoid `anyOf`, which Gemini supports only partly |
+| Prompt caching | Implicit caching (on by default for Gemini 2.5 and newer). The shared prefix must reach the model's minimum (4,096 tokens for Gemini 3.x Flash) to be cached. Cached tokens are read from the usage metadata and stored in `llm_calls.cached_tokens` |
+| Log-probabilities | `generationConfig.responseLogprobs` and `logprobs`. Support varies by model, so the adapter probes it in `test_connection` and sets `Capabilities.logprobs` |
+| Errors | `429 RESOURCE_EXHAUSTED` → `RateLimited`; 500/503 → `Transient`; 400 → `InvalidRequest`; 401/403 → `Auth`; a response blocked by safety filters is stored with `status = 'refused'` |
+
+**Models.** Model IDs are settings, never hard-coded. Defaults: a Flash-tier model for persona generation and answering; a Pro-tier model for the survey critic, theme coding and eval judging. Prefer stable models over `-preview` ones for defaults. As of September 2026 the Gemini docs list `gemini-3.8-flash` and `gemini-3.1-pro-preview`; `test_connection` lists the models the key can use.
+
+**API key.** The user enters their Gemini key in Settings; it is stored in Windows Credential Manager. CI and development read it from the `GEMINI_API_KEY` environment variable and never write it to disk.
 
 `LlmError` separates `RateLimited { retry_after }`, `Transient`, `InvalidRequest`, `Auth` and `SchemaViolation`, so the engine can choose retry, pause or fail.
 
 **Prompts**
 
 - Templates live in `llm/prompts/*.md`, are compiled into the binary and carry a version string such as `answer.v3`. The version is stored on every run.
-- Prompt order is fixed for caching: system rules → survey text and answer schema (identical for every respondent) → persona profile → instruction.
+- Prompt order is fixed for implicit caching: system rules → survey text and answer schema (identical for every respondent) → persona profile → instruction. Requests for the same survey are sent close together so cache hits are likely.
 - The system prompt tells the model to answer as the persona, including uncertainty, indifference and "don't know" where realistic.
 
 **Cost estimate.** Before a run, the UI shows estimated calls, input and output tokens and cost. The estimate uses a user-editable price table per model, stored in settings. Actual tokens from API usage fields are recorded per answer, and the run screen shows actual against estimated.
 
-**Model settings per run:** model ID, temperature (default 1.0), top-p, max output tokens and an optional second model for comparison runs.
+**Model settings per run:** model ID, temperature (default 1.0), top-p, max output tokens and an optional second Gemini model for comparison runs.
 
 ## 6. Database schema (SQLite)
 
@@ -264,22 +275,29 @@ The app must make the known weaknesses of LLM respondents visible and measurable
 | --- | --- |
 | Too little variance; answers cluster on the "typical" option | Temperature ≥ 1.0 by default; persona-specific biases in the prompt; show a variance metric per question |
 | Central tendency and agreeableness on Likert items | Prompt allows strong and negative views; mix reversed items; flag questions where more than 60% pick the midpoint |
-| Option-order effects | Seeded shuffle per respondent; order stored; order-effect check in the calibration report |
+| Option-order effects | Seeded shuffle per respondent; order stored; order-effect check in the fidelity report |
 | Opinions skewed toward some groups | Demographics from census-based tables; cross-tabs by demographic on every chart |
 | Invented certainty | "Don't know" and "Prefer not to say" offered where a real survey would offer them |
 | Model-specific quirks | Comparison runs: same cohort and survey on a second model, shown side by side |
 
-**Distribution mode.** When the provider exposes token log-probabilities, a choice question can also record each option's probability in `option_probs_json`. The UI can then chart the average probability per option next to the sampled counts. This is off by default and hidden when the model does not support it.
+**Distribution mode.** When the selected Gemini model supports log-probabilities, a choice question can also record each option's probability in `option_probs_json`. The UI can then chart the average probability per option next to the sampled counts. This is off by default and hidden when the model does not support it.
 
-**Calibration report.** A built-in benchmark pack holds 10–20 questions with published real-population results, plus their source and year. Running it against a cohort gives:
+**Fidelity calibration (AI-generated benchmark).** There is no real-world survey data for v1, so the benchmark pack is AI-generated. An AI-generated "real result" would only measure how closely one LLM agrees with another, so the pack does not use LLM opinions as ground truth. It uses **planted ground truth** instead:
 
-- per-question distance between synthetic and real distributions (total variation distance);
-- the mean across questions, shown as a single agreement score from 0 to 100;
-- any demographic subgroups where agreement is worst.
+1. A Gemini Pro-tier model generates 20 benchmark questions across choice, Likert and numeric types, each tied to one persona attribute (for example price sensitivity, age band or a stated bias).
+2. For each question, a written rule maps the attribute to an expected answer (for example "price sensitivity 4–5 → chooses the cheapest option").
+3. The expected distribution for any cohort is computed from its personas' attributes with that rule. It is exact and needs no LLM.
+4. A person reviews the pack once. It is frozen, versioned and committed as `benchmarks/fidelity.v1.json`, never regenerated at run time.
 
-The score is shown on every project that has been calibrated, with the model and date.
+Running the pack against a cohort measures **fidelity**: whether persona attributes actually drive answers. It gives:
 
-**UI disclosure.** Every results screen and export carries the line "Synthetic respondents — directional only" plus the run's model and prompt version.
+- per-question total variation distance between the expected and synthetic distributions;
+- the mean across questions, shown as a fidelity score from 0 to 100;
+- the demographic subgroups where fidelity is worst.
+
+**What this does not measure.** Fidelity is not realism. The pack cannot show whether synthetic answers match what real people would say. The UI labels the score "Fidelity" rather than "Accuracy", and results carry the disclosure below. Real-world calibration becomes possible if real survey results are added later; the pack format allows a `ground_truth: "observed"` source for that.
+
+**UI disclosure.** Every results screen and export carries the line "Synthetic respondents — directional only; not calibrated against real survey data" plus the run's model and prompt version.
 
 ## 9. UI screens and analytics
 
@@ -287,7 +305,7 @@ The app has six screens reached from a left sidebar inside a project. Every scre
 
 | Screen | Contents | Key interactions |
 | --- | --- | --- |
-| Projects | List with last run, cohort size, calibration score | Create, duplicate, delete, open |
+| Projects | List with last run, cohort size, fidelity score | Create, duplicate, delete, open |
 | Cohort builder | Size, seed, population preset, quota editor (sliders that keep shares at 100%), screening text | Live preview of quota counts; Generate |
 | Cohort review | Persona cards, virtualised table, target-vs-actual quota table | Filter, edit, regenerate one, Lock cohort |
 | Survey editor | Ordered questions by type, option editor, Likert scale settings, skip logic, randomise toggle | Drag to reorder; Critique survey flags leading, double-barrelled or loaded questions |
@@ -327,7 +345,7 @@ The API key never leaves Rust, and survey content leaves the machine only in cal
 
 - The settings screen states which provider receives survey text and personas.
 - Storing raw prompts and responses is off by default.
-- Users are told to use an enterprise endpoint with zero data retention for confidential concepts. Custom base URLs, such as Azure OpenAI, make this possible.
+- For confidential concepts, users are told to use a paid-tier Gemini API project; Google's terms for the free tier allow prompts to be used to improve its products. Check the current Gemini API terms before release.
 - No telemetry and no update checks unless the user turns on the updater.
 
 **Packaging**
@@ -340,7 +358,7 @@ The API key never leaves Rust, and survey content leaves the machine only in cal
 | Size budget | Rust binary ≤ 8 MB, frontend ≤ 2 MB gzipped, demographic tables ≤ 1 MB; CI fails above 15 MB |
 | Code signing | Authenticode certificate, so SmartScreen does not warn users |
 | Updates | Optional `tauri-plugin-updater` with signed releases, off by default |
-| CI | GitHub Actions on `windows-latest`: lint, test, build, size check, sign |
+| CI | GitHub Actions on `windows-latest` for lint, test, build and size check; Windows 11 VMs for release tests (see test plan §6) |
 
 ## 11. Milestones, acceptance and open questions
 
@@ -352,7 +370,7 @@ The build is split into five milestones. M1 fixes the contracts so frontend and 
 | M2 Cohorts | Quota sampler, persona enrichment, cohort review, lock | 100 personas match quotas exactly; same seed gives same demographics |
 | M3 Simulation | Survey editor, worker pool, rate limiter, retries, pause/resume/cancel, live progress | Acceptance tests below pass |
 | M4 Analytics | Distributions, cross-tabs, theme coding, exports, comparison runs | CSV opens correctly in Excel; charts update live |
-| M5 Validity | Calibration pack and report, option shuffling checks, disclosure, code signing | Calibration report runs end to end on one model |
+| M5 Validity | Fidelity benchmark pack and report, option shuffling checks, disclosure, code signing | Fidelity report runs end to end on the default Gemini model |
 
 **Acceptance tests**
 
@@ -372,11 +390,18 @@ The build is split into five milestones. M1 fixes the contracts so frontend and 
 - Image stimuli for concept tests, using multimodal models.
 - Weighting results to target margins after the run.
 
+**Decisions (2026-09-23)**
+
+- Memory budget is split: Rust process ≤ 50 MB, WebView2 renderer ≤ 100 MB.
+- Gemini is the only v1 provider and must work for every LLM feature, including eval judging.
+- The calibration pack is AI-generated with planted ground truth (§8).
+- Release-tier performance and install tests run on Windows VMs.
+
 **Open questions**
 
-- [ ] Which provider and model is the default, and does the company already have an enterprise endpoint?
-- [ ] Which base populations are needed first: US only, or also UK and other markets?
+- [ ] Which Gemini usage tier is the project on? It sets the default RPM, TPM and RPD limits and the safe default concurrency.
+- [ ] Windows 10 left mainstream support in October 2025. Keep it as a supported target, or ship Windows 11 only?
 - [ ] Is a code-signing certificate available, or does v1 ship unsigned for internal use?
+- [ ] Which base populations are needed first: US only, or also UK and other markets?
 - [ ] Is the 1,000-respondent limit enough, or is 5,000+ needed?
-- [ ] Which real survey results can be used for the calibration pack?
 - [ ] Should `whole_survey` stay the default answer mode, or should `conversational` be the default?

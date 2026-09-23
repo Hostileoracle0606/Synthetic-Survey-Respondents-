@@ -17,6 +17,9 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
 │  ├─ data/populations/*.csv        demographic joint tables
 │  └─ tests/                        engine tests against a mock LLM
 ├─ tools/build-populations/         offline script: census data → CSV tables
+├─ tools/generate-benchmark/        one-off script: Gemini → fidelity benchmark draft
+├─ benchmarks/fidelity.v1.json      reviewed, frozen benchmark pack
+├─ evals/                           prompt-behaviour eval crate and cases
 └─ .github/workflows/ci.yml
 ```
 
@@ -34,18 +37,20 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
    - All request and response structs are defined now, with `specta::Type` derives.
    - A `cargo test` step regenerates `src/bindings.ts`, and CI fails if that file changes.
 6. **Keychain and settings:** `set_api_key`, `has_api_key` and `delete_api_key` via `keyring`, plus the `settings` table.
-7. **LLM trait and one adapter:**
-   - `LlmProvider` trait.
-   - OpenAI-compatible adapter.
-   - `test_connection`.
+7. **LLM trait and the Gemini adapter:**
+   - `LlmProvider` trait, so other providers stay possible after v1.
+   - Gemini adapter on `generateContent`: structured output, usage and cached-token parsing, `RESOURCE_EXHAUSTED` handling (spec §5).
+   - `test_connection`: lists available models and probes log-probability support.
+   - Model IDs as settings, with a Flash-tier default for answering and a Pro-tier default for critic, theme coding and judging.
 8. **Mock LLM server:** a `wiremock` harness with scripted, slow, 429 and malformed responses.
 9. **CI on `windows-latest`:**
    - `cargo fmt/clippy/test`
    - `pnpm lint/typecheck/test`
    - `tauri build`
    - fail the build if the installer is over 15 MB.
+   - `GEMINI_API_KEY` stored as a GitHub Actions secret, available only to nightly, prompt-change and release jobs (never to PR jobs from forks).
 
-**Exit:** the installer builds, the API key round-trips through the keychain, `test_connection` succeeds against a real endpoint, and the bindings are committed.
+**Exit:** the installer builds, the API key round-trips through the keychain, `test_connection` succeeds against the Gemini API, and the bindings are committed.
 
 ## M2: Cohorts (about 1.5 weeks)
 
@@ -56,7 +61,7 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
    - Load the population table and draw N skeletons with ChaCha seeded by `seed`.
    - Rake the skeletons to the quota marginals with iterative proportional fitting (IPF), then round with largest-remainder.
    - Unit tests: counts match quotas exactly, the same seed gives the same output, and the joint constraints are respected.
-3. **`llm/schemas.rs`:** a `PersonaEnrichment` struct, with `schemars` generating the JSON schema. Add the Anthropic (tool-use) and Gemini adapters now so the schema path is tested on all three.
+3. **`llm/schemas.rs`:** a `PersonaEnrichment` struct, with `schemars` generating the JSON schema. Check every schema against Gemini's supported JSON Schema subset (flat objects, no `anyOf`) with a unit test.
 4. **`engine/cohort.rs`**
    - Batches of 5–10 skeletons, with a diversity hint listing earlier summaries from the same quota cell.
    - Screening, with a redraw on failure.
@@ -77,7 +82,7 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
 **Rust track**
 
 1. **`engine/limiter.rs`**
-   - Two `governor` buckets, one for requests per minute and one for tokens per minute.
+   - Three `governor` buckets matching Gemini's quotas: requests per minute, input tokens per minute and requests per day. Defaults come from the selected Gemini usage tier.
    - Token estimates are corrected after each call from the usage fields.
    - Adaptive concurrency: halve when more than 20% of calls in a window get 429s, and recover by +1 every 30 s.
 2. **`engine/retry.rs`:** classify `LlmError`, back off with `Retry-After` and jitter, and pause the run on auth or 400 errors.
@@ -90,10 +95,10 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
    - Shuffle options per respondent with the seed and store the order that was shown.
    - Validate each answer type and retry with the error message included in the prompt.
    - Mark answers `invalid` after the second failure.
-5. **Prompt templates** `answer.v1`, with the order fixed so the shared prefix can be cached (spec §5). Add `cache_control` for Anthropic.
+5. **Prompt templates** `answer.v1`, with the order fixed so the shared prefix can hit Gemini's implicit cache (spec §5). Check `cached_tokens` in the live nightly run; if the prefix is below the model's minimum (4,096 tokens for Gemini 3.x Flash), caching will not apply and the cost estimate must not assume it.
 6. **Progress batching:** gather deltas and flush to the Channel every 250 ms or 50 answers.
 7. **Resume on launch:** runs left in `running` state move to `paused`, and the UI offers Resume.
-8. `estimate_run`, with a user-editable price table.
+8. `estimate_run`, with a user-editable Gemini price table, and a check against the daily request quota (RPD) before the run starts.
 
 **UI track** (after step 3's types exist, which they do from M1)
 
@@ -114,11 +119,15 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
 
 ## M5: Validity and release (about 1 week)
 
-1. Calibration pack: 10–20 benchmark questions with real results and sources. The report shows total variation distance per question, a 0–100 agreement score and the worst-matching subgroups.
+1. Fidelity benchmark pack (spec §8):
+   - A one-off `tools/generate-benchmark` script asks a Gemini Pro-tier model for 20 questions, each tied to one persona attribute, with a written rule mapping the attribute to the expected answer.
+   - A person reviews the questions and rules, then the pack is frozen as `benchmarks/fidelity.v1.json`.
+   - The report computes expected distributions from each cohort's personas with those rules, then shows total variation distance per question, a 0–100 fidelity score and the worst-matching subgroups.
 2. A log-probability mode, where the provider supports it.
-3. The "Synthetic respondents — directional only" banner on every results screen and export footer.
+3. The "Synthetic respondents — directional only; not calibrated against real survey data" banner on every results screen and export footer.
 4. Authenticode signing in CI; optional updater, off by default.
-5. Hardening: a test that searches the database, logs and exports for the API key; log redaction; a memory check with 1,000 respondents (under 150 MB).
+5. Windows VM release pipeline (test plan §6): a Windows 11 VM image with a clean snapshot, restored before each release test run.
+6. Hardening: a test that searches the database, logs and exports for the API key; log redaction; a memory check with 1,000 respondents (Rust ≤ 50 MB, WebView2 renderer ≤ 100 MB).
 
 ## Parallelisation and agents
 
@@ -131,10 +140,13 @@ As of 2026-09-23. Implements [`SPEC.md`](SPEC.md). Five milestones, about 30 tas
 
 | Risk | Mitigation |
 |---|---|
-| Structured-output behaviour differs by provider | Adapter conformance tests in M2, run against all three providers |
+| Gemini schema limits or model changes break structured output | Schema-subset unit test; nightly live check on the default models; model IDs configurable |
+| Daily request quota (RPD) runs out mid-run | Pre-run quota check; the run pauses with the reset time |
 | Installer creeps over 15 MB | CI size check from M1 onward |
 | SQLite contention under high concurrency | Single writer plus batched commits, load-tested in M3 |
-| Synthetic answers show too little variation | Measured by M5 calibration; temperature and persona biases are the tuning levers |
+| Synthetic answers show too little variation | Measured by the M5 fidelity report; temperature and persona biases are the tuning levers |
+| Fidelity score is mistaken for real-world accuracy | Labelled "Fidelity" everywhere; disclosure on every result and export |
+| Same model family answers and judges | Judge with a different Gemini tier than the one under test; hand-check 20% of judgements (test plan S12) |
 
 ## Estimate
 
