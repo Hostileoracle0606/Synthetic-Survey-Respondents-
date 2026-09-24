@@ -61,6 +61,7 @@ pub fn run() {
             commands::default_quotas,
             commands::save_survey_info,
             commands::get_project,
+            commands::get_last_project,
             commands::generate_cohort,
             commands::regenerate_cohort,
             commands::get_latest_cohort,

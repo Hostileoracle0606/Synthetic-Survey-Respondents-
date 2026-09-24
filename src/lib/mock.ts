@@ -211,6 +211,7 @@ export const mock = {
     project = { id: projectId ?? 1, ...info, wizardStep: 1, createdAt: project?.createdAt ?? now, updatedAt: now };
     return project;
   },
+  getLastProject: async (): Promise<Project | null> => project,
   generateCohort: async (_projectId: number, config: CohortConfig, onProgress: (p: CohortProgress) => void) =>
     start(config, onProgress, 1),
   regenerateCohort: async (cohortId: number, onProgress: (p: CohortProgress) => void) =>

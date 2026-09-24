@@ -55,6 +55,9 @@ export const api = {
       : Promise.resolve(defaultQuotaGroups((countries as CountryOption[]).filter((c) => codes.includes(c.code)))),
   saveSurveyInfo: (projectId: number | null, info: SurveyInfo): Promise<Project> =>
     inTauri ? invoke("save_survey_info", { projectId, info }) : mock.saveSurveyInfo(projectId, info),
+  /** The most recently updated project, if any: reopened on launch at its furthest step. */
+  getLastProject: (): Promise<Project | null> =>
+    inTauri ? invoke("get_last_project") : mock.getLastProject(),
   generateCohort: (projectId: number, config: CohortConfig, onProgress: (p: CohortProgress) => void): Promise<Cohort> =>
     inTauri
       ? invoke("generate_cohort", { projectId, config, onProgress: progressChannel(onProgress) })

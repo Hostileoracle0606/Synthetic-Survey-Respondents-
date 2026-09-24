@@ -94,6 +94,12 @@ pub fn get_project(state: State<'_, AppState>, project_id: i64) -> AppResult<Pro
     projects::get_project(&*lock(&state)?, project_id)
 }
 
+/// The most recently updated project, if any: used to reopen the app on the last project.
+#[tauri::command]
+pub fn get_last_project(state: State<'_, AppState>) -> AppResult<Option<Project>> {
+    projects::latest(&*lock(&state)?)
+}
+
 /// Step 1 → Step 2: checks the gate, creates the cohort and starts the persona job in the
 /// background. Progress arrives on `on_progress`; the cohort's status says when it is done.
 #[tauri::command]
