@@ -38,13 +38,16 @@ export function SurveyInfoStep() {
     return () => {
       live = false;
     };
-  }, [selectionKey]);
+    // selectionKey (not info.countries) on purpose: it's a stable string, so this only refetches
+    // when the actual country selection changes, not on every render that touches info.
+  }, [selectionKey, setCohort]); // eslint-disable-line react-hooks/exhaustive-deps
   const censusNote = useMemo(() => {
     const selected = countries.filter((c) => info.countries.includes(c.code));
     if (selected.length === 1 && selected[0].hasCensusTable) return "Defaults match the adult population of this country (census data). Edit them to target a different audience.";
     if (selected.some((c) => !c.hasCensusTable)) return "No census table for some countries: people are drawn from these quotas only.";
     return "";
-  }, [countries, selectionKey]);
+    // selectionKey stands in for info.countries here too, for the same reason as above.
+  }, [countries, selectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const groupsOk = cohort.quotas.every((g) => g.rows.reduce((a, r) => a + r.percent, 0) === 100);
   const missing = [!info.researchType && "research type", info.countries.length === 0 && "a country", !info.title.trim() && "a project title"].filter(Boolean);

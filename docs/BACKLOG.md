@@ -8,7 +8,7 @@ As of 2026-09-23. The census population is Canada's (Statistics Canada 2021 Cens
 |---|---|---|---|
 | B1 | Full Settings screen: test and delete the key from the UI, model IDs (Flash / Pro), Gemini usage tier, price table | M2 only needs the key, handled by a minimal first-launch prompt. Models are picked automatically (newest stable Flash); rate limits use conservative defaults; prices are first needed in M3 for cost estimates | Settings screen saves all four; the rate limiter and cost estimate read them; first launch opens it when no key is stored |
 | B2 | Step 1 autosave on blur, and reopening a project at `projects.wizard_step` | Generate Cohort already saves the project before starting the job | Editing a field saves within 1 s; relaunching the app reopens the last project on its furthest step |
-| B3 | Frontend lint (ESLint with React hooks rules) in the web CI job | TypeScript strict mode and tests already run | `pnpm lint` passes and runs in CI |
+| ~~B3~~ | ~~Frontend lint (ESLint with React hooks rules) in the web CI job~~ **Done** (`eslint.config.js`; the web CI job runs `pnpm lint`) | TypeScript strict mode and tests already run | `pnpm lint` passes and runs in CI |
 
 ## Deferred from M2
 
