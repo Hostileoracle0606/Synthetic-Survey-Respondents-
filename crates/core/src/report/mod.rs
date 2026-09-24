@@ -352,7 +352,7 @@ fn question_report(q: &Question, data: &RunData) -> QuestionReport {
                 quotes: tagged.iter().take(3).map(|a| text(a)).collect(),
             });
         }
-        themes.sort_by(|a, b| b.count.cmp(&a.count));
+        themes.sort_by_key(|t| std::cmp::Reverse(t.count));
         if themes.is_empty() {
             sample_answers = valid.iter().take(5).map(|a| text(a)).collect();
         }
