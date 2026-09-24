@@ -58,6 +58,8 @@ fn seed(args: &[String]) -> Result<i64, String> {
         seed: 3,
         quotas: census_default_quotas("CA").ok_or("no census table for CA")?,
         screening: String::new(),
+        non_binary_share: 0,
+        countries: vec!["CA".into()],
     };
     let cohort = cohorts::create(
         &conn,
