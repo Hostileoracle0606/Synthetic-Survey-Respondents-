@@ -63,6 +63,19 @@ pub fn get_project(conn: &Connection, id: i64) -> AppResult<Project> {
     .ok_or_else(|| AppError::not_found(format!("project {id} not found")))
 }
 
+/// The most recently updated project, if any. Used to reopen the app on the last project.
+pub fn latest(conn: &Connection) -> AppResult<Option<Project>> {
+    Ok(conn
+        .query_row(
+            "SELECT id, title, research_type, product_category, countries_json, research_goal, wizard_step,
+                    created_at, updated_at
+             FROM projects ORDER BY updated_at DESC, id DESC LIMIT 1",
+            [],
+            from_row,
+        )
+        .optional()?)
+}
+
 fn from_row(r: &Row<'_>) -> rusqlite::Result<Project> {
     let research_type: Option<String> = r.get(2)?;
     let countries_json: String = r.get(4)?;
@@ -108,6 +121,26 @@ mod tests {
         assert_eq!(p2.id, p.id);
         assert_eq!(p2.countries, vec!["US", "CA"]);
         assert_eq!(p2.research_type, None);
+    }
+
+    #[test]
+    fn latest_returns_the_most_recently_updated_project() {
+        // strftime('%f') has millisecond resolution, so a short sleep between writes keeps
+        // their `updated_at` values distinct and the ordering deterministic.
+        let step = || std::thread::sleep(std::time::Duration::from_millis(5));
+
+        let conn = crate::db::open_in_memory();
+        assert!(latest(&conn).unwrap().is_none());
+        let p1 = save_survey_info(&conn, None, &info()).unwrap();
+        assert_eq!(latest(&conn).unwrap().unwrap().id, p1.id);
+        step();
+        let mut other = info();
+        other.title = "TV Purchase Study".into();
+        let p2 = save_survey_info(&conn, None, &other).unwrap();
+        assert_eq!(latest(&conn).unwrap().unwrap().id, p2.id);
+        step();
+        save_survey_info(&conn, Some(p1.id), &info()).unwrap();
+        assert_eq!(latest(&conn).unwrap().unwrap().id, p1.id);
     }
 
     #[test]

@@ -36,7 +36,7 @@ export function PersonasStep() {
     } catch (e) {
       setError(errorMessage(e));
     }
-  }, [cohortId, query, cards.length]);
+  }, [cohortId, query, cards.length, currentCohort]);
 
   // Poll while generating (the progress channel drives the bar; polling fills the grid and cards).
   const refreshRef = useRef(refresh);

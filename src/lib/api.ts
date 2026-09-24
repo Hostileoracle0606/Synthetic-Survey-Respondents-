@@ -24,6 +24,7 @@ import type { Report } from "../types/gen/Report";
 import type { QuestionBody } from "../types/gen/QuestionBody";
 import type { RunConfig } from "../types/gen/RunConfig";
 import type { RunProgress } from "../types/gen/RunProgress";
+import type { Settings } from "../types/gen/Settings";
 import type { SimulationRun } from "../types/gen/SimulationRun";
 import type { Survey } from "../types/gen/Survey";
 import type { SurveyInfo } from "../types/gen/SurveyInfo";
@@ -55,6 +56,9 @@ export const api = {
       : Promise.resolve(defaultQuotaGroups((countries as CountryOption[]).filter((c) => codes.includes(c.code)))),
   saveSurveyInfo: (projectId: number | null, info: SurveyInfo): Promise<Project> =>
     inTauri ? invoke("save_survey_info", { projectId, info }) : mock.saveSurveyInfo(projectId, info),
+  /** The most recently updated project, if any: reopened on launch at its furthest step. */
+  getLastProject: (): Promise<Project | null> =>
+    inTauri ? invoke("get_last_project") : mock.getLastProject(),
   generateCohort: (projectId: number, config: CohortConfig, onProgress: (p: CohortProgress) => void): Promise<Cohort> =>
     inTauri
       ? invoke("generate_cohort", { projectId, config, onProgress: progressChannel(onProgress) })
@@ -105,5 +109,9 @@ export const api = {
     inTauri ? invoke("export_run", { runId, format }) : mock.exportRun(format),
   hasApiKey: (): Promise<boolean> => (inTauri ? invoke("has_api_key") : Promise.resolve(true)),
   setApiKey: (key: string): Promise<void> => (inTauri ? invoke("set_api_key", { key }) : Promise.resolve()),
+  deleteApiKey: (): Promise<void> => (inTauri ? invoke("delete_api_key") : Promise.resolve()),
   testConnection: (): Promise<string[]> => (inTauri ? invoke("test_connection") : Promise.resolve(["gemini-mock-flash"])),
+  getSettings: (): Promise<Settings> => (inTauri ? invoke("get_settings") : mock.getSettings()),
+  saveSettings: (settings: Settings): Promise<Settings> =>
+    inTauri ? invoke("save_settings", { settings }) : mock.saveSettings(settings),
 };

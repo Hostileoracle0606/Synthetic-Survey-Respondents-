@@ -38,18 +38,33 @@ export function SurveyInfoStep() {
     return () => {
       live = false;
     };
-  }, [selectionKey]);
+    // selectionKey (not info.countries) on purpose: it's a stable string, so this only refetches
+    // when the actual country selection changes, not on every render that touches info.
+  }, [selectionKey, setCohort]); // eslint-disable-line react-hooks/exhaustive-deps
   const censusNote = useMemo(() => {
     const selected = countries.filter((c) => info.countries.includes(c.code));
     if (selected.length === 1 && selected[0].hasCensusTable) return "Defaults match the adult population of this country (census data). Edit them to target a different audience.";
     if (selected.some((c) => !c.hasCensusTable)) return "No census table for some countries: people are drawn from these quotas only.";
     return "";
-  }, [countries, selectionKey]);
+    // selectionKey stands in for info.countries here too, for the same reason as above.
+  }, [countries, selectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const groupsOk = cohort.quotas.every((g) => g.rows.reduce((a, r) => a + r.percent, 0) === 100);
   const missing = [!info.researchType && "research type", info.countries.length === 0 && "a country", !info.title.trim() && "a project title"].filter(Boolean);
   const canGenerate = missing.length === 0 && groupsOk && cohort.size >= 1 && cohort.size <= 1000;
   const hint = missing.length ? `Choose ${missing.join(", ")} to continue` : groupsOk ? `≈ ${Math.ceil(cohort.size / 8)} Gemini calls · runs in the background` : "Each quota group must total 100%";
+
+  /** Persists Step 1 fields so relaunching the app can reopen this project. Silent: the
+   * explicit "Generate Cohort" save above surfaces any real error to the user. */
+  async function autosave() {
+    if (!info.title.trim()) return;
+    try {
+      const project = await api.saveSurveyInfo(projectId, info);
+      setProjectId(project.id);
+    } catch {
+      // best-effort
+    }
+  }
 
   async function generate() {
     setStatus("Saving…");
@@ -91,6 +106,7 @@ export function SurveyInfoStep() {
             className={pillField}
             value={info.researchType ?? ""}
             onChange={(e) => setInfo({ researchType: (e.target.value || null) as ResearchType | null })}
+            onBlur={autosave}
           >
             <option value="">Select</option>
             {RESEARCH_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -98,23 +114,23 @@ export function SurveyInfoStep() {
         </div>
         <div className="flex flex-col gap-3">
           <Label htmlFor="category">Product Category</Label>
-          <select id="category" className={pillField} value={info.productCategory ?? ""} onChange={(e) => setInfo({ productCategory: e.target.value })}>
+          <select id="category" className={pillField} value={info.productCategory ?? ""} onChange={(e) => setInfo({ productCategory: e.target.value })} onBlur={autosave}>
             {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>
         <div className="col-span-2 flex flex-col gap-3">
           <Label htmlFor="title">Project Title</Label>
-          <input id="title" className={pillField} value={info.title} onChange={(e) => setInfo({ title: e.target.value })} placeholder="e.g., Canada Mobile Phone Purchase & Usage Study" />
+          <input id="title" className={pillField} value={info.title} onChange={(e) => setInfo({ title: e.target.value })} onBlur={autosave} placeholder="e.g., Canada Mobile Phone Purchase & Usage Study" />
         </div>
         <div className="col-span-2 flex flex-col gap-2">
           <Label id="lbl-country">Target Country</Label>
           <Help>Select the countries where your target respondents live.</Help>
-          <CountrySelect options={countries} value={info.countries} onChange={(c) => setInfo({ countries: c })} />
+          <CountrySelect options={countries} value={info.countries} onChange={(c) => { setInfo({ countries: c }); void autosave(); }} />
         </div>
         <div className="col-span-2 flex flex-col gap-2">
           <Label htmlFor="objective">Research Objective &amp; Requirements</Label>
           <Help>The more detail you give on research objectives, requirements and target respondent criteria, the better the Agent can propose a research design and questionnaire.</Help>
-          <textarea id="objective" rows={4} className={areaField} value={info.researchGoal} onChange={(e) => setInfo({ researchGoal: e.target.value })} placeholder="e.g., Objective: To analyze purchase behavior, brand choice drivers, and usage patterns among Canadian smartphone owners." />
+          <textarea id="objective" rows={4} className={areaField} value={info.researchGoal} onChange={(e) => setInfo({ researchGoal: e.target.value })} onBlur={autosave} placeholder="e.g., Objective: To analyze purchase behavior, brand choice drivers, and usage patterns among Canadian smartphone owners." />
         </div>
       </div>
 

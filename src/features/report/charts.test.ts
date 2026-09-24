@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { divergingColours } from "./charts";
+import { divergingColours } from "./palette";
 
 describe("divergingColours", () => {
   it("has a grey midpoint for odd scales and none for even ones", () => {
