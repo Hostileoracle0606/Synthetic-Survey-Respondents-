@@ -8,6 +8,7 @@ import type { QuestionType } from "../../types/gen/QuestionType";
 import type { Survey } from "../../types/gen/Survey";
 import { AppShell } from "../../components/AppShell";
 import { Arrow, pillButton, primaryButton } from "../../components/fields";
+import { moveBefore, sameOrder } from "../../lib/reorder";
 
 const TYPES: [QuestionType, string][] = [
   ["single_choice", "Single choice"],
@@ -168,16 +169,34 @@ export function QuestionnaireStep() {
     if (projectId == null) return;
     setSurvey(await api.redraftSurvey(projectId));
   });
-  const move = (id: number, by: -1 | 1) => act(async () => {
+  /** Saves a new order (same `reorder_questions` call for buttons, keys and drag) and keeps focus on the moved question. */
+  const reorder = (ids: number[], focus: number) => act(async () => {
+    if (!survey || sameOrder(ids, survey.questions.map((q) => q.id))) return;
+    setSurvey(await api.reorderQuestions(survey.id, ids));
+    requestAnimationFrame(() => listRef.current?.querySelector<HTMLButtonElement>(`[data-q="${focus}"]`)?.focus());
+  });
+  const move = (id: number, by: -1 | 1) => {
     if (!survey) return;
     const ids = survey.questions.map((q) => q.id);
     const i = ids.indexOf(id);
     const j = i + by;
     if (j < 0 || j >= ids.length) return;
     [ids[i], ids[j]] = [ids[j], ids[i]];
-    setSurvey(await api.reorderQuestions(survey.id, ids));
-    requestAnimationFrame(() => listRef.current?.querySelector<HTMLButtonElement>(`[data-q="${id}"]`)?.focus());
-  });
+    return reorder(ids, id);
+  };
+  // Drag and drop: `dropBefore` is the question the dragged one lands in front of (null = the end).
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [dropBefore, setDropBefore] = useState<number | null | undefined>(undefined);
+  const endDrag = () => {
+    setDragging(null);
+    setDropBefore(undefined);
+  };
+  const drop = () => {
+    if (survey && dragging != null && dropBefore !== undefined) {
+      reorder(moveBefore(survey.questions.map((q) => q.id), dragging, dropBefore), dragging);
+    }
+    endDrag();
+  };
   const startRun = () => act(async () => {
     if (projectId == null) return;
     run.reset();
@@ -229,9 +248,41 @@ export function QuestionnaireStep() {
             </div>
           </div>
           {generating && <p className="m-0 text-sm text-muted" role="status">Drafting from your research brief. This takes a few seconds; you can add questions by hand meanwhile.</p>}
-          <ol ref={listRef} className="m-0 flex list-none flex-col gap-2 p-0">
-            {survey?.questions.map((q, i) => (
-              <li key={q.id}>
+          <ol
+            ref={listRef}
+            className="m-0 flex list-none flex-col gap-2 p-0"
+            onDragOver={(e) => {
+              if (dragging == null) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              // Below the last card: drop at the end. (Gaps between cards keep the last target.)
+              const last = e.currentTarget.lastElementChild?.getBoundingClientRect();
+              if (e.target === e.currentTarget && last && e.clientY > last.bottom) setDropBefore(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              drop();
+            }}
+          >
+            {survey?.questions.map((q, i, all) => (
+              <li
+                key={q.id}
+                draggable={!busy}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", String(q.id));
+                  setDragging(q.id);
+                }}
+                onDragEnd={endDrag}
+                onDragOver={(e) => {
+                  if (dragging == null) return;
+                  e.preventDefault();
+                  // Top half: in front of this card; bottom half: in front of the next one.
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setDropBefore(e.clientY < r.top + r.height / 2 ? q.id : all[i + 1]?.id ?? null);
+                }}
+                className={`relative rounded-2xl ${dragging === q.id ? "opacity-40" : ""} ${dragging != null && dropBefore === q.id ? "before:absolute before:-top-1.5 before:left-2 before:right-2 before:h-0.5 before:rounded-full before:bg-accent" : ""} ${dragging != null && dropBefore === null && i === all.length - 1 ? "after:absolute after:-bottom-1.5 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-accent" : ""}`}
+              >
                 <button
                   type="button"
                   data-q={q.id}
@@ -241,8 +292,8 @@ export function QuestionnaireStep() {
                     if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); move(q.id, -1); }
                     if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); move(q.id, 1); }
                   }}
-                  title="Alt+↑ / Alt+↓ to reorder"
-                  className={`flex w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left ${q.id === selected ? "border-accent bg-white ring-4 ring-accent/10" : "border-line bg-white hover:border-[#bdbdb5]"}`}
+                  title="Drag, or Alt+↑ / Alt+↓, to reorder"
+                  className={`flex w-full cursor-grab flex-col gap-1 rounded-2xl border px-4 py-3 text-left active:cursor-grabbing ${q.id === selected ? "border-accent bg-white ring-4 ring-accent/10" : "border-line bg-white hover:border-[#bdbdb5]"}`}
                 >
                   <span className="flex items-center justify-between gap-2 font-mono text-xs text-muted">
                     <span>{i + 1}. {q.code}</span>
