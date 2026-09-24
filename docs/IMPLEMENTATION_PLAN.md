@@ -142,11 +142,11 @@ Exit criteria:
 
 **Exit:** CSV opens correctly in Excel; charts match golden fixtures; synthesis never shows a number that fails the check.
 
-**Status (2026-09-24):** items 1, 2, 4, 5 and 6 are built; item 3 is built except editing themes (BACKLOG B17). Synthesis and theme coding use the newest stable Pro model, falling back to Flash, and start by themselves when a run completes or is stopped. Exports open a native save dialog from Rust, so the window needs no dialog or fs permission. Exit criteria:
+**Status (2026-09-24):** items 1, 2, 4, 5 and 6 are built; item 3 is built except editing themes. Synthesis and theme coding use the newest stable Pro model, falling back to Flash, and start by themselves when a run completes or is stopped. Exports open a native save dialog from Rust, so the window needs no dialog or fs permission. Exit criteria:
 
 - **CSV for Excel:**
   - Tests check the UTF-8 BOM, CRLF line endings, quoting, one row per respondent, the 0/1 columns and the formula-injection guard.
-  - Opening the file in real Excel is part of the M5 VM checks (B19).
+  - Opening the file in real Excel is part of the M5 VM checks.
 - **Charts match golden fixtures:**
   - A 40-respondent fixture with hand-computed numbers covers every question type and the cross-tabs, including low base and stopped runs.
   - The browser pass on the mock renders every chart type.
