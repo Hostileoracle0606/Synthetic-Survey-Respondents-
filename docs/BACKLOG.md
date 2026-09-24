@@ -14,11 +14,11 @@ As of 2026-09-23. The census population is Canada's (Statistics Canada 2021 Cens
 
 | # | Item | Why it can wait | Done when |
 |---|---|---|---|
-| B4 | Mark the cohort "out of date" when Step 1 audience fields change after generation (DATA_FLOW §2) | Users can regenerate by hand; no data is lost | Step 2 shows the banner when the saved `CohortConfig` differs from Step 1 |
+| ~~B4~~ | ~~Mark the cohort "out of date" when Step 1 audience fields change after generation (DATA_FLOW §2)~~ | **Done:** `CohortConfig` now snapshots the countries a cohort was generated for; Step 2 shows a "Cohort out of date" banner when the live Step 1 form (countries, size, quotas, screening or non-binary share) differs from the saved cohort, with a Regenerate action | — |
 | B5 | Census tables for countries other than Canada (the US included) | v1 decision: other countries use quotas-only sampling, flagged in the country list | A table exists per supported country, built by `tools/build-populations` |
 | ~~B6~~ | ~~Finer age draw for the 60+ band~~ | **Done in M2:** Canadian ages are drawn from the census age distribution (`CA_ages.csv`; the PUMF gives 5-year groups, so ages are spread evenly within each group); countries without a census table still draw 60+ from 60–84 | — |
-| B7 | Non-binary respondents | The census records sex as two categories, so skeleton gender is binary | A documented, user-set share that the sampler applies on top of the census table |
-| B8 | Full stepper precondition rules (DATA_FLOW §2), e.g. Step 4 opens only with an approved survey | Steps 3–5 are placeholders until M3/M4; the stepper already blocks steps not yet reached | Each step's precondition is checked in the stepper and by its commands |
+| ~~B7~~ | ~~Non-binary respondents~~ | **Done:** `CohortConfig.nonBinaryShare` (0–100%, edited on Step 1 next to the quotas) is applied by the sampler on top of the census/quota gender draw, keyed by respondent ordinal so a redraw at screening keeps the same person non-binary; rejected if combined with a `"gender"` quota group | — |
+| ~~B8~~ | ~~Full stepper precondition rules (DATA_FLOW §2), e.g. Step 4 opens only with an approved survey~~ | **Done:** the Step 1–4 gates were already enforced (Rust validation, the cohort-lock and run-start checks, the survey-approval trigger); the one gap — `get_report`/`get_crosstab`/`export_run` returning data for a run that hadn't finished — is now refused by `report::load` unless the run is `completed` or `stopped` | — |
 
 ## Deferred from M3
 

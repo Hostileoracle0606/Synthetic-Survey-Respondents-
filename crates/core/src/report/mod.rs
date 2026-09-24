@@ -14,7 +14,7 @@ use crate::db::{runs, surveys};
 use crate::error::{AppError, AppResult};
 use crate::model::{
     ChartKind, CrossTab, CrossTabGroup, Dimension, Question, QuestionReport, QuestionType, Report,
-    ReportRow, Synthesis, SynthesisStatus, ThemeSummary,
+    ReportRow, RunStatus, Synthesis, SynthesisStatus, ThemeSummary,
 };
 use crate::sampling::population::{AGE_BANDS, INCOMES};
 
@@ -108,6 +108,13 @@ pub(crate) struct RunData {
 
 pub(crate) fn load(conn: &Connection, run_id: i64) -> AppResult<RunData> {
     let run = runs::get(conn, run_id)?;
+    // Step 5 opens only once a run is completed or stopped (DATA_FLOW §2); `report`, `crosstab`
+    // and both exports all go through here.
+    if !matches!(run.status, RunStatus::Completed | RunStatus::Stopped) {
+        return Err(AppError::invalid(
+            "the run must finish or be stopped before viewing the report",
+        ));
+    }
     let survey = surveys::get(conn, run.survey_id)?;
     // The questions this run asked, in survey order: ones added later for another run are
     // left out, and ones retired since are kept. Before any answers, the current survey.
@@ -747,5 +754,35 @@ mod tests {
             .questions
             .iter()
             .all(|q| q.n + q.invalid + q.refused == 30));
+    }
+
+    /// Step 5 opens only once a run is completed or stopped (DATA_FLOW §2); `report` and
+    /// `crosstab` (and, through the same `load`, both exports) all refuse anything else.
+    #[test]
+    fn report_refuses_a_run_that_has_not_finished() {
+        let f = Fixture::build();
+        for status in ["queued", "running", "paused", "cancelled", "failed"] {
+            f.conn
+                .execute(
+                    "UPDATE simulation_runs SET status = ?1 WHERE id = ?2",
+                    params![status, f.run_id],
+                )
+                .unwrap();
+            assert_eq!(
+                report(&f.conn, f.run_id).unwrap_err().code,
+                crate::ErrorCode::InvalidInput,
+                "status {status}"
+            );
+            assert!(crosstab(&f.conn, f.run_id, f.q("BRAND"), "gender").is_err());
+        }
+        for status in ["completed", "stopped"] {
+            f.conn
+                .execute(
+                    "UPDATE simulation_runs SET status = ?1 WHERE id = ?2",
+                    params![status, f.run_id],
+                )
+                .unwrap();
+            assert!(report(&f.conn, f.run_id).is_ok(), "status {status}");
+        }
     }
 }

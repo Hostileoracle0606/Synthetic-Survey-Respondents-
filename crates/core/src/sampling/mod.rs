@@ -45,6 +45,9 @@ pub fn validate(config: &CohortConfig) -> AppResult<()> {
             "number of respondents must be 1–{MAX_COHORT}"
         )));
     }
+    if config.non_binary_share > 100 {
+        return Err(AppError::invalid("non-binary share must be 0-100"));
+    }
     if config.quotas.is_empty() {
         return Err(AppError::invalid("at least one quota group is required"));
     }
@@ -133,12 +136,20 @@ mod tests {
             seed: 1,
             quotas: vec![group(&[50, 50])],
             screening: String::new(),
+            non_binary_share: 0,
+            countries: vec![],
         };
         assert!(validate(&c).is_ok());
         c.size = 0;
         assert!(validate(&c).is_err());
         c.size = 200;
         c.quotas.push(group(&[40, 40]));
+        assert_eq!(
+            validate(&c).unwrap_err().code,
+            crate::ErrorCode::InvalidInput
+        );
+        c.quotas.pop();
+        c.non_binary_share = 101;
         assert_eq!(
             validate(&c).unwrap_err().code,
             crate::ErrorCode::InvalidInput

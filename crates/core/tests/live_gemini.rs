@@ -100,6 +100,8 @@ async fn live_persona_batch() {
             ],
         }],
         screening: String::new(),
+        non_binary_share: 0,
+        countries: vec!["CA".into()],
     };
     let skeletons = Sampler::new(&cfg, &["CA".into()]).unwrap().draw().unwrap();
     let req = build_request(
@@ -152,6 +154,8 @@ async fn live_cohort_200_matches_quotas() {
         seed: 2026,
         quotas: census_default_quotas("CA").expect("CA census table"),
         screening: "Owns a smartphone.".into(),
+        non_binary_share: 0,
+        countries: vec!["CA".into()],
     };
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("data.db");

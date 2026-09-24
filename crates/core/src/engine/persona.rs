@@ -404,6 +404,8 @@ mod tests {
                 ],
             }],
             screening: String::new(),
+            non_binary_share: 0,
+            countries: vec!["CA".into()],
         };
         Sampler::new(&cfg, &["CA".into()]).unwrap().draw().unwrap()
     }

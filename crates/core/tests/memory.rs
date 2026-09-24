@@ -86,6 +86,8 @@ async fn thousand_by_twenty_stays_within_the_rust_memory_budget() {
         seed: 3,
         quotas: census_default_quotas("CA").unwrap(),
         screening: String::new(),
+        non_binary_share: 0,
+        countries: vec!["CA".into()],
     };
     let cohort =
         cohorts::create(&conn, 1, &config, None, "flash", persona::PROMPT_VERSION).unwrap();

@@ -77,6 +77,8 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Cohort> {
         seed: 0,
         quotas: vec![],
         screening: String::new(),
+        non_binary_share: 0,
+        countries: vec![],
     });
     Ok(Cohort {
         id: r.get(0)?,
@@ -346,4 +348,53 @@ fn humanise(s: &str) -> String {
     c.next()
         .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::QuotaGroup;
+
+    fn config() -> CohortConfig {
+        CohortConfig {
+            size: 10,
+            seed: 1,
+            quotas: vec![QuotaGroup {
+                key: "age".into(),
+                label: "Age".into(),
+                rows: vec![],
+            }],
+            screening: String::new(),
+            non_binary_share: 5,
+            countries: vec!["CA".into(), "US".into()],
+        }
+    }
+
+    #[test]
+    fn create_then_get_round_trips_the_config() {
+        let conn = crate::db::open_in_memory();
+        conn.execute("INSERT INTO projects(title) VALUES ('p')", [])
+            .unwrap();
+        let cfg = config();
+        let c = create(&conn, 1, &cfg, None, "flash", "v1").unwrap();
+        assert_eq!(c.config, cfg);
+        assert_eq!(get(&conn, c.id).unwrap().config, cfg);
+        assert_eq!(latest(&conn, 1).unwrap().unwrap().config, cfg);
+    }
+
+    /// DATA_FLOW §2: Step 2's "Proceed to Questionnaire" only locks a `ready` cohort.
+    #[test]
+    fn lock_refuses_before_ready() {
+        let conn = crate::db::open_in_memory();
+        conn.execute("INSERT INTO projects(title) VALUES ('p')", [])
+            .unwrap();
+        let c = create(&conn, 1, &config(), None, "flash", "v1").unwrap();
+        assert_eq!(c.status, CohortStatus::Generating);
+        assert!(lock(&conn, c.id).is_err());
+
+        set_status(&conn, c.id, CohortStatus::Ready, None).unwrap();
+        assert_eq!(lock(&conn, c.id).unwrap().status, CohortStatus::Locked);
+        // Locking an already-locked cohort is a no-op, not an error.
+        assert_eq!(lock(&conn, c.id).unwrap().status, CohortStatus::Locked);
+    }
 }

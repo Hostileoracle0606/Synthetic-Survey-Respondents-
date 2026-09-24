@@ -609,6 +609,8 @@ mod tests {
                     .collect(),
             }],
             screening: String::new(),
+            non_binary_share: 0,
+            countries: vec!["CA".into()],
         };
         let cohort = cohorts::create(&conn, 1, &config, None, "flash", PROMPT_VERSION).unwrap();
         let skels = Sampler::new(&config, &["CA".into()])
@@ -1060,7 +1062,14 @@ mod tests {
             .message
             .contains("survey changed"));
 
-        // Launch recovery unsticks background jobs left generating.
+        // Launch recovery unsticks background jobs left generating. Synthesis only ever runs
+        // on a finished run (a stuck synthesis on a still-paused one can't happen for real),
+        // so move it there before checking the report, which now requires a finished run.
+        conn.execute(
+            "UPDATE simulation_runs SET status = 'stopped' WHERE id = ?1",
+            [id],
+        )
+        .unwrap();
         conn.execute_batch(
             "UPDATE surveys SET draft_status = 'generating'; UPDATE simulation_runs SET synthesis_status = 'generating';",
         )

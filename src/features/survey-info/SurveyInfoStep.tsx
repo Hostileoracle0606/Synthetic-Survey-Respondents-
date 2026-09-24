@@ -146,6 +146,19 @@ export function SurveyInfoStep() {
       </div>
       {censusNote && <Help>{censusNote}</Help>}
       <QuotaEditor size={cohort.size} groups={cohort.quotas} onChange={(quotas) => setCohort({ quotas })} />
+      <div className="flex items-center gap-5">
+        <Label htmlFor="non-binary-share">Non-binary share (%)</Label>
+        <input
+          id="non-binary-share"
+          type="number"
+          min={0}
+          max={100}
+          value={cohort.nonBinaryShare}
+          onChange={(e) => setCohort({ nonBinaryShare: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+          className="h-11 w-24 rounded-full border border-line text-center"
+        />
+        <Help>Applied on top of the census gender split, independent of the quotas above. 0 keeps it census-only.</Help>
+      </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="screening">Screening Criteria</Label>
         <Help>Respondents who don’t meet these are replaced from the same quota group.</Help>
