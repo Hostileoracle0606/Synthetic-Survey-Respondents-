@@ -289,8 +289,8 @@ Covers SM15, SM18. Uses the default Gemini models and the frozen AI-generated be
 
 **Building the pack (once, in M5)**
 
-1. `tools/generate-benchmark` asks the Gemini Pro-tier model for 30 candidate questions across choice, Likert and numeric types, each with an attribute and a rule.
-2. A person keeps 20, checking that each rule is unambiguous and that the question does not name the attribute outright (otherwise the test is trivial).
+1. `fidelity candidates` (crate `survey-evals`) asks the Gemini Pro-tier model for 30 candidate questions across choice, Likert and numeric types, each tied to an attribute. Gemini writes questions only, never rules or expected answers (decision D1).
+2. A person keeps 20 and writes each rule, checking that it is unambiguous and that the question does not name the attribute outright (otherwise the test is trivial). `fidelity check` validates the pack; `--release` also requires it to be frozen.
 3. The pack is frozen and versioned. A new version is a deliberate change, reviewed like code, and fidelity scores are only compared within one pack version.
 
 | Check | Method | Threshold |

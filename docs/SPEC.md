@@ -330,16 +330,18 @@ The app must make the known weaknesses of LLM respondents visible and measurable
 
 **Fidelity calibration (AI-generated benchmark).** There is no real-world survey data for v1, so the benchmark pack is AI-generated. An AI-generated "real result" would only measure how closely one LLM agrees with another, so the pack does not use LLM opinions as ground truth. It uses **planted ground truth** instead:
 
-1. A Gemini Pro-tier model generates 20 benchmark questions across choice, Likert and numeric types, each tied to one persona attribute (for example price sensitivity, age band or a stated bias).
-2. For each question, a written rule maps the attribute to an expected answer (for example "price sensitivity 4–5 → chooses the cheapest option").
+1. A Gemini Pro-tier model proposes candidate questions across choice, Likert and numeric types, each tied to one persona attribute (for example price sensitivity, age band or a stated bias). It writes **questions only**: no rules, no expected answers (decision D1).
+2. A person keeps about 20 and writes, for each, the rule that maps the attribute to an expected answer distribution (for example "price sensitivity 4–5 → 50% the cheapest option, 35% refurbished"). The question must not name its attribute.
 3. The expected distribution for any cohort is computed from its personas' attributes with that rule. It is exact and needs no LLM.
-4. A person reviews the pack once. It is frozen, versioned and committed as `benchmarks/fidelity.v1.json`, never regenerated at run time.
+4. The pack is frozen, versioned and committed as `benchmarks/fidelity.v1.json` (`status: "frozen"`, `reviewed_by`, `frozen_at`), never regenerated at run time. Release runs refuse an unfrozen pack. Tools: `fidelity candidates`, `fidelity check`, `fidelity run` in the `survey-evals` crate.
 
 Running the pack against a cohort measures **fidelity**: whether persona attributes actually drive answers. It gives:
 
 - per-question total variation distance between the expected and synthetic distributions;
 - the mean across questions, shown as a fidelity score from 0 to 100;
 - the demographic subgroups where fidelity is worst.
+
+**Label-free checks (decision D3).** Every question in every run also gets checks that need no expected answers, shown under its chart in Step 5 and in the fidelity report: normalised entropy (flag below 0.4), Likert midpoint share (flag above 60%), and, for shuffled single-choice questions, first- vs last-position choice rates (flag a gap of 5 points or more with p < 0.05).
 
 **What this does not measure.** Fidelity is not realism. The pack cannot show whether synthetic answers match what real people would say. The UI labels the score "Fidelity" rather than "Accuracy", and results carry the disclosure below. Real-world calibration becomes possible if real survey results are added later; the pack format allows a `ground_truth: "observed"` source for that.
 

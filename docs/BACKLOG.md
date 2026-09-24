@@ -43,13 +43,26 @@ As of 2026-09-23. The census population is Canada's (Statistics Canada 2021 Cens
 | B20 | Live Gemini tests for theme coding and synthesis, in the nightly `live` job | The prompts are covered by `ScriptedLlm` tests; drafting and answering already have live tests | Both run nightly and pass the same checks the app applies |
 | B21 | Show the claims the synthesis checks removed (they're in the JSON export today) | The panel says how many were removed | A "Show removed claims" toggle lists them with the reason |
 
+## Deferred from M5
+
+| # | Item | Why it can wait | Done when |
+|---|---|---|---|
+| B22 | Freeze the fidelity pack: a person reviews every rule in `benchmarks/fidelity.v1.json` (the six starter rules are drafts written to show the format), or replaces it with reviewed candidates from `fidelity candidates` | Needs a person, by decision D1; nightly runs accept the draft and label it | `status: "frozen"`, `reviewed_by`, `frozen_at` set; `fidelity check --release` passes |
+| B23 | Log-probability mode: per-option probabilities for choice questions where the Gemini model returns them (SPEC §8, M5 item 2) | Off by default and hidden when unsupported; needs single-question calls and a probe per model | `option_probs_json` filled, charted next to sampled counts |
+| B24 | Code-signing certificate and the `WINDOWS_CERTIFICATE` secrets | Open decision (unsigned internal use is the fallback); the release workflow signs as soon as the secrets exist | Signed installers pass `signtool verify /pa` in the release run |
+| B25 | Updater (optional, off by default; M5 item 4) | Releases are installed by hand | Tauri updater behind a setting, off by default, with signed update manifests |
+| B26 | Provision the Windows VMs (`win11-clean`, `win11-perf`, and `win10-clean` while Windows 10 is a target), register them as runners and set `RELEASE_VMS=true` | Needs cloud access and budget (open decision); installs are smoke-tested on `windows-latest` meanwhile | The VM jobs in `release.yml` run on every tag |
+| B27 | Remaining S13 rows: run-to-run stability (3 seeds) and model comparison (default Flash vs another Gemini model) | The fidelity score, attribute sensitivity, variance, midpoint, order effect and subgroup checks are built | `fidelity run` takes several seeds and models and reports both |
+| B28 | Remaining S14/S8 release tests: `upgrade_keeps_data`, `clean_install_win10_no_webview2`, `network_egress` | Need the VMs (B26) | Automated in the VM jobs |
+| B29 | S12 baselines and human checks: record the first pass rates as baselines, have a person check 20% of judgements each release, and grow the case files toward the sizes in TEST_PLAN S12 (critic and theme-coder evals need the critic, B9, and human-coded themes) | The harness, 14 cases and zero-tolerance injection check exist | Baselines stored in `evals/results.jsonl`; thresholds enforced against them |
+
 ## Design changes agreed or proposed but not yet in the docs
 
 | # | Change | Status | Where it goes |
 |---|---|---|---|
-| D1 | Fidelity benchmark: Gemini writes questions only (no expected answers, no rules); a person writes the attribute rules during review | Agreed in discussion, not applied | SPEC §8, IMPLEMENTATION_PLAN M5 item 1, TEST_PLAN S13 |
+| ~~D1~~ | Fidelity benchmark: Gemini writes questions only (no expected answers, no rules); a person writes the attribute rules during review | **Applied in M5** (SPEC §8, TEST_PLAN S13, `survey-evals`) | SPEC §8, IMPLEMENTATION_PLAN M5 item 1, TEST_PLAN S13 |
 | D2 | Census realism check: personas answer held-out factual questions (home ownership, dwelling type, commute mode, language spoken at home…) and are scored against real 2021 Census PUMF answers for their demographic cells; variables used to build personas are excluded | Proposed, awaiting approval | SPEC §8, TEST_PLAN S13, `tools/build-populations` (the same microdata already feeds the US table) |
-| D3 | Label-free validity checks (variance, midpoint rate, order effects, run-to-run stability) run on every question, including ones without rules | Part of D1/D2 | TEST_PLAN S13 |
+| ~~D3~~ | Label-free validity checks (variance, midpoint rate, order effects, run-to-run stability) run on every question, including ones without rules | **Applied in M5** except run-to-run stability (B27) | TEST_PLAN S13 |
 | D4 | The shared spec doc on claude.ai is behind the repo's `docs/SPEC.md` | Not synced since the Gemini-only decision | Re-sync or retire the shared doc in favour of the repo |
 
 ## Open decisions (need an answer before the stage that uses them)
