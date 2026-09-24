@@ -114,6 +114,9 @@ CREATE TABLE simulation_runs (
         -- stopped = "Stop & Save Progress": partial results kept and reportable; cancelled = discarded
     est_cost_usd    REAL,
     error           TEXT,                    -- why the run paused or failed, e.g. an invalid key
+    synthesis_status TEXT NOT NULL DEFAULT 'none'
+                    CHECK (synthesis_status IN ('none','generating','ready','failed')),  -- theme coding + AI synthesis job
+    synthesis_error TEXT,
     started_at      TEXT,
     finished_at     TEXT,
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))

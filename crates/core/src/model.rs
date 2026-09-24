@@ -540,3 +540,173 @@ impl RunStatus {
         }
     }
 }
+
+// ---- Step 5: report ----
+
+/// Chart chosen from the question type (docs/DATA_FLOW.md §3, Step 5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ChartKind {
+    /// Single choice with up to 6 options.
+    Pie,
+    Bar,
+    /// Multiple choice: % of respondents choosing each option (can total over 100%).
+    MultiBar,
+    /// Likert: distribution across the scale.
+    Diverging,
+    Histogram,
+    Themes,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ReportRow {
+    /// Option code, scale point or histogram bin start.
+    pub key: String,
+    pub label: String,
+    pub count: u32,
+    pub percent: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ThemeSummary {
+    #[ts(type = "number")]
+    pub id: i64,
+    pub label: String,
+    pub description: String,
+    pub count: u32,
+    pub percent: f64,
+    /// Up to three example answers.
+    pub quotes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct QuestionReport {
+    #[ts(type = "number")]
+    pub question_id: i64,
+    pub code: String,
+    pub text: String,
+    pub question_type: QuestionType,
+    pub chart: ChartKind,
+    /// Valid answers, the base for every percentage.
+    pub n: u32,
+    pub invalid: u32,
+    pub refused: u32,
+    pub rows: Vec<ReportRow>,
+    pub mean: Option<f64>,
+    pub median: Option<f64>,
+    pub q1: Option<f64>,
+    pub q3: Option<f64>,
+    pub unit: Option<String>,
+    pub themes: Vec<ThemeSummary>,
+    /// Open answers shown while themes are not coded yet (up to 5).
+    pub sample_answers: Vec<String>,
+}
+
+/// A respondent attribute to cross-tabulate by.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Dimension {
+    pub key: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum SynthesisStatus {
+    None,
+    Generating,
+    Ready,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FrictionPoint {
+    pub label: String,
+    /// Checked against the theme coding before display.
+    pub mentions: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SegmentTakeaway {
+    /// Dimension key, e.g. "age".
+    pub dimension: String,
+    /// A real cross-tab group, e.g. "18–29".
+    pub group: String,
+    pub takeaway: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Synthesis {
+    pub summary: String,
+    pub friction_points: Vec<FrictionPoint>,
+    pub segments: Vec<SegmentTakeaway>,
+    pub based_on_n: u32,
+    pub model: String,
+    /// Claims removed because they failed the checks.
+    pub dropped: u32,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Report {
+    pub run: SimulationRun,
+    /// Respondents with saved answers (fewer than the cohort for a stopped run).
+    pub based_on_n: u32,
+    pub questions: Vec<QuestionReport>,
+    pub dimensions: Vec<Dimension>,
+    pub synthesis: Option<Synthesis>,
+    pub synthesis_status: SynthesisStatus,
+    pub synthesis_error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CrossTabGroup {
+    pub label: String,
+    pub n: u32,
+    /// Under 30 respondents: read with care.
+    pub low_base: bool,
+    /// % within the group, one per column.
+    pub cells: Vec<f64>,
+    /// Likert and numeric questions.
+    pub mean: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CrossTab {
+    #[ts(type = "number")]
+    pub question_id: i64,
+    pub dimension: Dimension,
+    /// Answer columns: options, scale points or themes.
+    pub columns: Vec<ReportRow>,
+    pub groups: Vec<CrossTabGroup>,
+}
+
+/// Save-dialog export formats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ExportFormat {
+    Csv,
+    Json,
+}

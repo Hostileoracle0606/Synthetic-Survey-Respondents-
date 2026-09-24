@@ -996,4 +996,103 @@ mod tests {
         assert_eq!(orders(a), orders(b));
         assert!(orders(a).iter().flatten().count() >= 8);
     }
+
+    /// SPEC §11: no API key appears in the database, logs or exports. A run, theme coding,
+    /// synthesis and both exports go through the real Gemini client (against a local mock
+    /// server) with a recognisable key; then every file is searched for it.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn no_api_key_in_the_database_logs_or_exports() {
+        use crate::engine::synthesis::{self, SynthesisJob};
+        use crate::llm::gemini::GeminiClient;
+        use serde_json::json;
+        use wiremock::matchers::{header, method};
+        use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
+
+        const KEY: &str = "AIzaLEAKCHECK_0123456789_abcdefghijklmn";
+        struct Gemini;
+        impl Respond for Gemini {
+            fn respond(&self, req: &Request) -> ResponseTemplate {
+                let body: Value = serde_json::from_slice(&req.body).unwrap();
+                let system = body["systemInstruction"]["parts"][0]["text"]
+                    .as_str()
+                    .unwrap_or_default();
+                let prompt = body["contents"][0]["parts"][0]["text"]
+                    .as_str()
+                    .unwrap_or_default();
+                let reply = if system.contains("survey as the person") {
+                    reply_for_prompt(prompt)
+                } else if system.contains("code open-ended") {
+                    json!({"themes": [{"label": "Price", "description": "d", "answers": [1, 2]}]})
+                } else {
+                    json!({"summary": "Answers were mixed.", "friction_points": [], "segments": []})
+                };
+                ResponseTemplate::new(200).set_body_json(json!({
+                    "candidates": [{ "content": { "parts": [{ "text": reply.to_string() }] }, "finishReason": "STOP" }],
+                    "usageMetadata": { "promptTokenCount": 100, "candidatesTokenCount": 50 }
+                }))
+            }
+        }
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(header("x-goog-api-key", KEY))
+            .respond_with(Gemini)
+            .mount(&server)
+            .await;
+
+        let e = env(6, 5); // includes an open-ended question
+        let id = start(&e, 2);
+        let llm: Arc<dyn LlmProvider> = Arc::new(GeminiClient::with_base_url(KEY, server.uri()));
+        let (_tx, rx) = watch::channel(Mode::Run);
+        let plan = runs::plan(&e.conn(), id).unwrap();
+        let out = run(
+            plan,
+            llm.clone(),
+            limiter(2),
+            e.writer.clone(),
+            rx,
+            Arc::new(|_| {}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(out.status, RunStatus::Completed);
+        synthesis::run(
+            SynthesisJob {
+                run_id: id,
+                model: "flash".into(),
+                db_path: e.path.clone(),
+                recode_themes: false,
+            },
+            llm.clone(),
+            limiter(2),
+            e.writer.clone(),
+        )
+        .await
+        .unwrap();
+        // A rejected call's error text is stored too; it must not carry the key either.
+        let bad = GeminiClient::with_base_url(KEY, "http://127.0.0.1:9")
+            .complete_structured(&build_request("m", "", &[], ""))
+            .await;
+        let err = bad.unwrap_err().to_string();
+        assert!(!err.contains(KEY));
+        assert!(!format!("{:?}", GeminiClient::new(KEY)).contains(KEY));
+
+        let conn = e.conn();
+        let csv = crate::report::export::csv(&conn, id).unwrap();
+        let json_export = crate::report::export::json(&conn, id).unwrap().to_string();
+        assert!(csv.lines().count() == 7 && json_export.contains("Price"));
+        drop(conn);
+        let mut files = vec![csv.into_bytes(), json_export.into_bytes()];
+        for suffix in ["", "-wal", "-shm"] {
+            if let Ok(bytes) = std::fs::read(format!("{}{suffix}", e.path.display())) {
+                files.push(bytes);
+            }
+        }
+        for f in &files {
+            assert!(
+                !f.windows(KEY.len()).any(|w| w == KEY.as_bytes()),
+                "API key found in an output"
+            );
+        }
+        assert!(files.len() >= 3);
+    }
 }

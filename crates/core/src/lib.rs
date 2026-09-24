@@ -9,6 +9,7 @@ pub mod engine;
 pub mod error;
 pub mod llm;
 pub mod model;
+pub mod report;
 pub mod sampling;
 
 pub use error::{AppError, AppResult, ErrorCode};
