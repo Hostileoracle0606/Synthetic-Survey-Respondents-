@@ -9,6 +9,7 @@ import type { RespondentDetail } from "../types/gen/RespondentDetail";
 import type { RespondentPage } from "../types/gen/RespondentPage";
 import type { CrossTab } from "../types/gen/CrossTab";
 import type { ExportFormat } from "../types/gen/ExportFormat";
+import type { Critique } from "../types/gen/Critique";
 import type { Question } from "../types/gen/Question";
 import type { QuestionReport } from "../types/gen/QuestionReport";
 import type { Report } from "../types/gen/Report";
@@ -93,9 +94,33 @@ let run: SimulationRun | null = null;
 let runTimer: ReturnType<typeof setInterval> | null = null;
 let runListener: ((p: RunProgress) => void) | null = null;
 
+/** Stand-in for the Gemini critic: flags obvious leading or double-barrelled wording. */
+function mockCritique(b: QuestionBody): Critique {
+  const flags: Critique["flags"] = [];
+  if (/\b(love|amazing|great|don't you|wouldn't you)\b/i.test(b.text))
+    flags.push({ issue: "leading", note: "The wording suggests the answer. Ask neutrally, e.g. \"How would you rate…\"." });
+  if (/\b(and|or)\b/i.test(b.text.replace(/\?.*$/, "")) && b.questionType !== "multi_choice")
+    flags.push({ issue: "double_barrelled", note: "This may ask about two things at once. Split it into two questions if so." });
+  if (b.text.trim().split(/\s+/).length < 4) flags.push({ issue: "unclear", note: "Too short to be clear to a respondent. Say exactly what is being asked." });
+  return { status: "done", flags, error: null, promptVersion: "critic.v1" };
+}
+
+/** Marks a question as being checked and fills in the result shortly after, like the real job. */
+function checkLater(x: Question): Question {
+  const body = x.body;
+  setTimeout(() => {
+    const s = survey;
+    if (!s) return;
+    const done = (y: Question) => (y.id === x.id && y.body === body ? { ...y, critique: mockCritique(body) } : y);
+    s.questions = s.questions.map(done);
+    s.suggestions = s.suggestions.map(done);
+  }, 900);
+  return { ...x, critique: { status: "checking", flags: [], error: null, promptVersion: "critic.v1" } };
+}
+
 function q(code: string, body: QuestionBody, active: boolean): Question {
   const id = nextId++;
-  return { id, code, orderIndex: id, body, isActive: active, origin: "ai", reviewStatus: active ? "pending" : "suggested", objective: "Purchase intent and drivers", rationale: "Preview question." };
+  return { id, code, orderIndex: id, body, isActive: active, origin: "ai", reviewStatus: active ? "pending" : "suggested", objective: "Purchase intent and drivers", rationale: "Preview question.", critique: mockCritique(body) };
 }
 
 function ensureSurvey(): Survey {
@@ -261,7 +286,8 @@ export const mock = {
     return structuredClone(s);
   },
   updateQuestion: async (id: number, body: QuestionBody): Promise<Question> =>
-    structuredClone(patchQuestion(id, (x) => ({ ...x, body, origin: x.origin === "ai" ? "ai_edited" : x.origin, reviewStatus: "pending" }))),
+    structuredClone(patchQuestion(id, (x) => checkLater({ ...x, body, origin: x.origin === "ai" ? "ai_edited" : x.origin, reviewStatus: "pending" }))),
+  critiqueQuestion: async (id: number): Promise<Question> => structuredClone(patchQuestion(id, checkLater)),
   reorderQuestions: async (ids: number[]): Promise<Survey> => {
     const s = ensureSurvey();
     s.questions = ids.map((id, i) => ({ ...s.questions.find((x) => x.id === id)!, orderIndex: i + 1 }));
@@ -269,7 +295,7 @@ export const mock = {
   },
   addQuestion: async (): Promise<Question> => {
     const s = ensureSurvey();
-    const nq: Question = { ...q(`Q${s.questions.length + 1}`, { text: "New question", questionType: "single_choice", options: opts(["Option 1", "Option 2"]), randomize: true, maxChoices: null, scale: null, numeric: null }, true), origin: "human", objective: null, rationale: null };
+    const nq: Question = { ...q(`Q${s.questions.length + 1}`, { text: "New question", questionType: "single_choice", options: opts(["Option 1", "Option 2"]), randomize: true, maxChoices: null, scale: null, numeric: null }, true), origin: "human", objective: null, rationale: null, critique: null };
     s.questions.push(nq);
     return structuredClone(nq);
   },

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { useWizard } from "../../store/wizard";
 import { useRun } from "../../store/run";
+import type { CriticIssue } from "../../types/gen/CriticIssue";
+import type { Critique } from "../../types/gen/Critique";
 import type { Question } from "../../types/gen/Question";
 import type { QuestionBody } from "../../types/gen/QuestionBody";
 import type { QuestionType } from "../../types/gen/QuestionType";
@@ -18,6 +20,51 @@ const TYPES: [QuestionType, string][] = [
   ["open_ended", "Open answer"],
 ];
 const typeLabel = (t: QuestionType) => TYPES.find(([k]) => k === t)?.[1] ?? t;
+const ISSUES: Record<CriticIssue, string> = { leading: "Leading", double_barrelled: "Double-barrelled", unclear: "Unclear" };
+
+/** One line for a question card: what the critic found, or that it is still checking. */
+function critiqueSummary(c: Critique | null): { text: string; warn: boolean } | null {
+  if (!c) return null;
+  if (c.status === "checking") return { text: "Checking wording…", warn: false };
+  if (c.status === "failed") return { text: "Wording check failed", warn: false };
+  if (c.flags.length === 0) return null;
+  return { text: `⚑ ${c.flags.map((f) => ISSUES[f.issue]).join(", ")}`, warn: true };
+}
+
+/** The critic's flags on the selected question. Advice only: approval never waits on it. */
+function CritiquePanel({ critique, busy, onCheck }: { critique: Critique | null; busy: boolean; onCheck: () => void }) {
+  const again = <button type="button" className={`${smallButton} h-8 shrink-0`} onClick={onCheck} disabled={busy}>Check again</button>;
+  if (!critique) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-muted">
+        <span>The wording is checked by Gemini when you save the question.</span>
+        {again}
+      </div>
+    );
+  }
+  if (critique.status === "checking") {
+    return <p className="m-0 rounded-2xl border border-line px-4 py-3 text-sm text-muted" role="status">Gemini is checking the wording for leading, double-barrelled or unclear questions…</p>;
+  }
+  if (critique.status === "failed") {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-muted">
+        <span>The wording check didn't finish{critique.error ? `: ${critique.error}` : ""}.</span>
+        {again}
+      </div>
+    );
+  }
+  if (critique.flags.length === 0) {
+    return <p className="m-0 rounded-2xl border border-[#cfe0c4] bg-[#f1f7ec] px-4 py-3 text-sm text-[#3d5a2a]">No wording problems found.</p>;
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-[#ecd9ae] bg-[#fbf5e8] px-4 py-3 text-sm text-[#6b4f16]" aria-label="Wording flags">
+      {critique.flags.map((f) => (
+        <p key={f.issue} className="m-0"><strong className="font-medium">{ISSUES[f.issue]}:</strong> {f.note}</p>
+      ))}
+      <p className="m-0 text-xs">Advice from Gemini's critic. Fix the wording or approve it as it is.</p>
+    </div>
+  );
+}
 
 const smallButton =
   "inline-flex h-9 items-center justify-center rounded-full border border-line px-3.5 text-sm hover:bg-[#f1f1ee] disabled:cursor-not-allowed disabled:opacity-40";
@@ -100,11 +147,13 @@ export function QuestionnaireStep() {
     load();
   }, [load]);
   const generating = survey?.draftStatus === "generating";
+  // Critic results arrive in the background, one question at a time.
+  const checking = !!survey && [...survey.questions, ...survey.suggestions].some((q) => q.critique?.status === "checking");
   useEffect(() => {
-    if (!generating) return;
+    if (!generating && !checking) return;
     const t = setInterval(load, 1500);
     return () => clearInterval(t);
-  }, [generating, load]);
+  }, [generating, checking, load]);
 
   const current = survey?.questions.find((q) => q.id === selected) ?? null;
   useEffect(() => {
@@ -144,6 +193,10 @@ export function QuestionnaireStep() {
     let q = current;
     if (dirty && draft) q = await api.updateQuestion(current.id, draft);
     replace(await api.approveQuestion(q.id));
+  });
+  const checkAgain = () => act(async () => {
+    if (!current) return;
+    replace(await api.critiqueQuestion(current.id));
   });
   const addNew = () => act(async () => {
     if (!survey) return;
@@ -303,6 +356,10 @@ export function QuestionnaireStep() {
                   </span>
                   <span className="line-clamp-2 text-[15px]">{q.body.text}</span>
                   <span className="text-xs text-muted">{typeLabel(q.body.questionType)}{q.origin === "human" ? " · written by you" : q.origin === "ai_edited" ? " · AI, edited" : " · AI draft"}</span>
+                  {(() => {
+                    const c = critiqueSummary(q.critique);
+                    return c && <span className={`text-xs ${c.warn ? "text-[#8a5a00]" : "text-muted"}`}>{c.text}</span>;
+                  })()}
                 </button>
               </li>
             ))}
@@ -387,6 +444,8 @@ export function QuestionnaireStep() {
                 </div>
               )}
 
+              <CritiquePanel critique={current.critique} busy={busy} onCheck={checkAgain} />
+
               {(current.objective || current.rationale) && (
                 <div className="rounded-2xl bg-[#f6f6f2] px-4 py-3 text-sm text-muted">
                   {current.objective && <p className="m-0"><strong className="font-medium text-ink">Serves:</strong> {current.objective}</p>}
@@ -417,6 +476,10 @@ export function QuestionnaireStep() {
             <div key={s.id} className="flex flex-col gap-2 rounded-2xl border border-line bg-white px-4 py-3">
               <span className="text-[15px]">{s.body.text}</span>
               <span className="text-xs text-muted">{typeLabel(s.body.questionType)}{s.body.options.length ? ` · ${s.body.options.length} options` : ""}</span>
+              {(() => {
+                const c = critiqueSummary(s.critique);
+                return c && <span className={`text-xs ${c.warn ? "text-[#8a5a00]" : "text-muted"}`} title={s.critique?.flags.map((f) => `${ISSUES[f.issue]}: ${f.note}`).join("\n")}>{c.text}</span>;
+              })()}
               <button type="button" className={`${smallButton} self-start`} onClick={() => addSuggestion(s.id)} disabled={busy}>+ Add to survey</button>
             </div>
           ))}

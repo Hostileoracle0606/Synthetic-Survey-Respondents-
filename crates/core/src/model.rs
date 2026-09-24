@@ -437,6 +437,50 @@ pub struct Question {
     /// What the question is for (from the draft); shown to the reviewer, never to respondents.
     pub objective: Option<String>,
     pub rationale: Option<String>,
+    /// The critic's check of the current wording; None until one has been asked for (a
+    /// person's new question is checked when first saved). Advice only: never blocks approval.
+    pub critique: Option<Critique>,
+}
+
+/// Wording problems the critic looks for (docs/DATA_FLOW.md §3, Step 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CriticIssue {
+    Leading,
+    DoubleBarrelled,
+    Unclear,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CriticFlag {
+    pub issue: CriticIssue,
+    /// What is wrong and how to fix it, in a sentence or two.
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CriticStatus {
+    Checking,
+    Done,
+    Failed,
+}
+
+/// Stored with the question (`questions.critic_json`) and cleared when its wording changes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Critique {
+    pub status: CriticStatus,
+    pub flags: Vec<CriticFlag>,
+    /// Why the check failed, when it did.
+    pub error: Option<String>,
+    /// Prompt version that produced the flags, e.g. "critic.v1".
+    pub prompt_version: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

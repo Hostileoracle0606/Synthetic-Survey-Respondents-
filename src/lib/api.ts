@@ -78,6 +78,8 @@ export const api = {
     inTauri ? invoke("update_survey_text", { surveyId, title, intro }) : mock.updateSurveyText(title, intro),
   updateQuestion: (questionId: number, body: QuestionBody): Promise<Question> =>
     inTauri ? invoke("update_question", { questionId, body }) : mock.updateQuestion(questionId, body),
+  critiqueQuestion: (questionId: number): Promise<Question> =>
+    inTauri ? invoke("critique_question", { questionId }) : mock.critiqueQuestion(questionId),
   reorderQuestions: (surveyId: number, orderedIds: number[]): Promise<Survey> =>
     inTauri ? invoke("reorder_questions", { surveyId, orderedIds }) : mock.reorderQuestions(orderedIds),
   addQuestion: (surveyId: number): Promise<Question> => (inTauri ? invoke("add_question", { surveyId }) : mock.addQuestion()),

@@ -32,9 +32,10 @@ static SCHEMA_BODY: LazyLock<String> = LazyLock::new(|| {
 });
 
 /// Changes after the first release of the schema, in order. Never edit one once released.
-const LATER: &[&str] = &[include_str!(
-    "../../../../docs/migrations/002_survey_text_edited.sql"
-)];
+const LATER: &[&str] = &[
+    include_str!("../../../../docs/migrations/002_survey_text_edited.sql"),
+    include_str!("../../../../docs/migrations/003_question_critique.sql"),
+];
 
 pub fn migrations() -> Migrations<'static> {
     let mut all = vec![M::up(SCHEMA_BODY.as_str())];

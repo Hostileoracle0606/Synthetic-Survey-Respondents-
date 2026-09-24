@@ -72,6 +72,7 @@ pub fn run() {
             commands::redraft_survey,
             commands::update_survey_text,
             commands::update_question,
+            commands::critique_question,
             commands::reorder_questions,
             commands::add_question,
             commands::delete_question,

@@ -166,12 +166,17 @@ pub fn set_status(
 }
 
 /// On launch, after the app closed or crashed: runs left `running` become `paused`, and
-/// survey drafts or report syntheses left `generating` become `failed`, so their Retry and
-/// Regenerate buttons work again. Returns the number of runs paused.
+/// survey drafts, wording checks or report syntheses left unfinished become `failed`, so their
+/// Retry, Check again and Regenerate buttons work again. Returns the number of runs paused.
 pub fn recover_on_launch(conn: &Connection) -> AppResult<usize> {
     conn.execute(
         "UPDATE surveys SET draft_status = 'failed', draft_error = 'The app closed while the draft was being written.'
          WHERE draft_status = 'generating'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE questions SET critic_json = json_set(critic_json, '$.status', 'failed', '$.error', 'The app closed while the wording was being checked.')
+         WHERE json_extract(critic_json, '$.status') = 'checking'",
         [],
     )?;
     conn.execute(

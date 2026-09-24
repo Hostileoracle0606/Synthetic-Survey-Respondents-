@@ -322,6 +322,7 @@ async fn live_whole_survey_answer() {
         review_status: ReviewStatus::Accepted,
         objective: None,
         rationale: None,
+        critique: None,
     };
     let qs = [
         q(
@@ -368,5 +369,47 @@ async fn live_whole_survey_answer() {
     eprintln!(
         "model {model}: {} in {} ms, usage {:?}",
         resp.json, resp.latency_ms, resp.usage
+    );
+}
+
+/// B9: the critic prompt on the real API (Pro when the key has it) flags an obviously
+/// leading, double-barrelled question and returns no unknown issue kinds.
+#[tokio::test]
+#[ignore = "calls the live Gemini API"]
+async fn live_critic() {
+    use survey_core::engine::critic::{build_request, parse_reply};
+    use survey_core::model::{ChoiceOption, CriticIssue, QuestionBody, QuestionType};
+    let c = client();
+    let models = c.list_models().await.expect("list_models");
+    let model = survey_core::llm::gemini::drafting_model(&models).expect("a model");
+    let body = QuestionBody {
+        text: "Don't you agree that our amazing new phone's battery and camera are better than anything else?".into(),
+        question_type: QuestionType::SingleChoice,
+        options: ["Yes", "Definitely yes"]
+            .iter()
+            .enumerate()
+            .map(|(i, l)| ChoiceOption {
+                code: ((b'A' + i as u8) as char).to_string(),
+                label: l.to_string(),
+            })
+            .collect(),
+        randomize: false,
+        max_choices: None,
+        scale: None,
+        numeric: None,
+    };
+    let resp = c
+        .complete_structured(&build_request(&model, &body))
+        .await
+        .expect("critic call succeeds");
+    let flags = parse_reply(&resp.json).expect("reply has a flags list");
+    assert!(
+        flags.iter().any(|f| f.issue == CriticIssue::Leading),
+        "no leading flag in {}",
+        resp.json
+    );
+    eprintln!(
+        "model {model}: {:?} in {} ms, usage {:?}",
+        flags, resp.latency_ms, resp.usage
     );
 }

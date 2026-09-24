@@ -8,6 +8,7 @@ use tauri::State;
 
 use survey_core::db::{cohorts, projects, runs, surveys};
 use survey_core::engine::cohort::{self, CohortJob};
+use survey_core::engine::critic;
 use survey_core::engine::draft::{self, DraftBrief, DraftJob};
 use survey_core::engine::persona::PROMPT_VERSION;
 use survey_core::engine::run::{self as sim, Mode};
@@ -292,13 +293,49 @@ pub fn update_survey_text(
     surveys::update_text(&*lock(&state)?, survey_id, &title, &intro)
 }
 
+/// Marks the questions as being checked and starts the critic in the background; each
+/// result is stored on its question.
+async fn start_critic(state: &State<'_, AppState>, question_ids: &[i64]) -> AppResult<()> {
+    let client = gemini()?;
+    let model = draft_model(state, &client).await?;
+    let targets = {
+        let conn = lock(state)?;
+        question_ids
+            .iter()
+            .map(|id| surveys::start_critique(&conn, *id, critic::PROMPT_VERSION))
+            .collect::<AppResult<Vec<_>>>()?
+    };
+    let llm: Arc<dyn LlmProvider> = Arc::new(client);
+    let (limiter, writer) = (state.limiter.clone(), state.writer.clone());
+    tauri::async_runtime::spawn(async move {
+        let _ = critic::run(targets, model, llm, limiter, writer).await;
+    });
+    Ok(())
+}
+
+/// Saves an edit, then has the critic check the new wording. The edit is kept even when the
+/// check can't start (no key, offline): the flags are advice, not a gate.
 #[tauri::command]
-pub fn update_question(
+pub async fn update_question(
     state: State<'_, AppState>,
     question_id: i64,
     body: QuestionBody,
 ) -> AppResult<Question> {
-    surveys::update_question(&*lock(&state)?, question_id, body)
+    let q = surveys::update_question(&*lock(&state)?, question_id, body)?;
+    if start_critic(&state, &[q.id]).await.is_err() {
+        return Ok(q);
+    }
+    surveys::question(&*lock(&state)?, question_id)
+}
+
+/// "Check again": runs the critic on the question's current wording.
+#[tauri::command]
+pub async fn critique_question(
+    state: State<'_, AppState>,
+    question_id: i64,
+) -> AppResult<Question> {
+    start_critic(&state, &[question_id]).await?;
+    surveys::question(&*lock(&state)?, question_id)
 }
 
 #[tauri::command]

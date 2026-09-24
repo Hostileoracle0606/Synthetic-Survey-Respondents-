@@ -8,8 +8,8 @@ use serde_json::{json, Value};
 
 use crate::error::{AppError, AppResult};
 use crate::model::{
-    DraftStatus, NumericRange, Question, QuestionBody, QuestionOrigin, QuestionType, ReviewStatus,
-    Scale, Survey, SurveyStatus,
+    CriticStatus, Critique, DraftStatus, NumericRange, Question, QuestionBody, QuestionOrigin,
+    QuestionType, ReviewStatus, Scale, Survey, SurveyStatus,
 };
 
 pub const MAX_OPTIONS: usize = 15;
@@ -174,7 +174,7 @@ fn body_from(text: String, qtype: &str, options: Option<String>) -> QuestionBody
     b
 }
 
-const QUESTION_COLS: &str = "id, code, order_index, question_text, question_type, options_json, is_active, origin, review_status, objective, rationale";
+const QUESTION_COLS: &str = "id, code, order_index, question_text, question_type, options_json, is_active, origin, review_status, objective, rationale, critic_json";
 
 fn question_from_row(r: &Row) -> rusqlite::Result<Question> {
     let origin: String = r.get(7)?;
@@ -198,6 +198,9 @@ fn question_from_row(r: &Row) -> rusqlite::Result<Question> {
         },
         objective: r.get(9)?,
         rationale: r.get(10)?,
+        critique: r
+            .get::<_, Option<String>>(11)?
+            .and_then(|j| serde_json::from_str(&j).ok()),
     })
 }
 
@@ -416,7 +419,7 @@ pub fn update_question(conn: &Connection, id: i64, body: QuestionBody) -> AppRes
         "UPDATE questions SET question_text = ?2, question_type = ?3, options_json = ?4,
             origin = CASE origin WHEN 'ai' THEN 'ai_edited' ELSE origin END,
             review_status = CASE review_status WHEN 'suggested' THEN 'suggested' ELSE 'pending' END,
-            reviewed_at = NULL
+            reviewed_at = NULL, critic_json = NULL
          WHERE id = ?1",
         params![
             id,
@@ -427,6 +430,57 @@ pub fn update_question(conn: &Connection, id: i64, body: QuestionBody) -> AppRes
     )?;
     reopen(conn, survey_id)?;
     question(conn, id)
+}
+
+/// The wording a critique judged: text, type and options exactly as stored. A critique is
+/// saved only if the question still reads the same, so a slow check can't overwrite a newer one.
+const WORDING: &str =
+    "question_text || char(31) || question_type || char(31) || COALESCE(options_json, '')";
+
+/// A question queued for the critic.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CriticTarget {
+    pub question_id: i64,
+    pub body: QuestionBody,
+    pub wording: String,
+}
+
+/// Marks the question as being checked and returns what the critic should judge.
+pub fn start_critique(conn: &Connection, id: i64, prompt_version: &str) -> AppResult<CriticTarget> {
+    let q = question(conn, id)?;
+    let checking = Critique {
+        status: CriticStatus::Checking,
+        flags: Vec::new(),
+        error: None,
+        prompt_version: prompt_version.to_string(),
+    };
+    conn.execute(
+        "UPDATE questions SET critic_json = ?2 WHERE id = ?1",
+        params![id, serde_json::to_string(&checking).unwrap_or_default()],
+    )?;
+    let wording = conn.query_row(
+        &format!("SELECT {WORDING} FROM questions WHERE id = ?1"),
+        [id],
+        |r| r.get(0),
+    )?;
+    Ok(CriticTarget {
+        question_id: id,
+        body: q.body,
+        wording,
+    })
+}
+
+/// Stores the critic's result. Returns false (and stores nothing) when the question has been
+/// edited or deleted since the check started.
+pub fn save_critique(conn: &Connection, target: &CriticTarget, c: &Critique) -> AppResult<bool> {
+    Ok(conn.execute(
+        &format!("UPDATE questions SET critic_json = ?2 WHERE id = ?1 AND {WORDING} = ?3"),
+        params![
+            target.question_id,
+            serde_json::to_string(c).unwrap_or_default(),
+            target.wording
+        ],
+    )? == 1)
 }
 
 /// Rewrites `order_index` for the active questions in the given order. Runs in one
@@ -867,6 +921,50 @@ mod tests {
         assert_eq!(ids, [approved, edited, human]);
         assert!(!ids.contains(&untouched));
         assert!(survey.suggestions.is_empty());
+    }
+
+    #[test]
+    fn a_critique_is_stored_with_its_question_and_cleared_by_an_edit() {
+        use crate::model::{CriticFlag, CriticIssue};
+        let (conn, s) = setup();
+        let a = ai(&conn, s, "A", false);
+        assert!(question(&conn, a).unwrap().critique.is_none());
+        let target = start_critique(&conn, a, "critic.v1").unwrap();
+        assert_eq!(target.body.text, "Question A?");
+        let q = question(&conn, a).unwrap();
+        assert_eq!(q.critique.unwrap().status, CriticStatus::Checking);
+        let done = Critique {
+            status: CriticStatus::Done,
+            flags: vec![CriticFlag {
+                issue: CriticIssue::DoubleBarrelled,
+                note: "Asks two things.".into(),
+            }],
+            error: None,
+            prompt_version: "critic.v1".into(),
+        };
+        assert!(save_critique(&conn, &target, &done).unwrap());
+        assert_eq!(question(&conn, a).unwrap().critique.unwrap(), done);
+        // Flags never block approval.
+        assert_eq!(
+            approve_question(&conn, a).unwrap().review_status,
+            ReviewStatus::Accepted
+        );
+
+        // An edit clears the flags, and a check of the old wording can't bring them back.
+        let stale = start_critique(&conn, a, "critic.v1").unwrap();
+        let mut body = stale.body.clone();
+        body.text = "Question A, reworded?".into();
+        let q = update_question(&conn, a, body).unwrap();
+        assert!(q.critique.is_none());
+        assert!(!save_critique(&conn, &stale, &done).unwrap());
+        assert!(question(&conn, a).unwrap().critique.is_none());
+
+        // A check cut short by closing the app shows as failed, so it can be run again.
+        start_critique(&conn, a, "critic.v1").unwrap();
+        crate::db::runs::recover_on_launch(&conn).unwrap();
+        let c = question(&conn, a).unwrap().critique.unwrap();
+        assert_eq!(c.status, CriticStatus::Failed);
+        assert!(c.error.unwrap().contains("app closed"));
     }
 
     #[test]

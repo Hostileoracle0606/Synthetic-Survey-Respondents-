@@ -309,6 +309,7 @@ pub fn as_question(q: &PackQuestion, index: usize) -> Question {
         review_status: ReviewStatus::Accepted,
         objective: None,
         rationale: None,
+        critique: None,
     }
 }
 

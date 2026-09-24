@@ -2,13 +2,14 @@
 //! questions and the suggestions from the research brief. It never sees the cohort, and the
 //! reply schema has no field for expected answers.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::call::with_retries;
+use super::critic;
 use super::limiter::RateLimiter;
 use crate::db::surveys::{self, NewQuestion};
 use crate::db::writer::Writer;
@@ -204,7 +205,8 @@ pub struct DraftJob {
 }
 
 /// Runs the draft. The caller sets the survey to `generating` first; this sets it to `ready`
-/// or `failed` (people can still write questions by hand after a failure).
+/// or `failed` (people can still write questions by hand after a failure), then has the
+/// critic check every drafted question.
 pub async fn run(
     job: DraftJob,
     llm: Arc<dyn LlmProvider>,
@@ -214,16 +216,24 @@ pub async fn run(
     let survey_id = job.survey_id;
     let outcome = draft(&job, &llm, &limiter, &writer).await;
     let error = outcome.as_ref().err().map(|e| e.to_string());
+    let to_check = Arc::new(Mutex::new(Vec::new()));
+    let checks = to_check.clone();
     writer
         .write(Box::new(move |c| match outcome {
             Ok(d) => {
                 // Redraft replaces only questions nobody has touched.
                 surveys::clear_untouched_ai(c, survey_id)?;
+                let mut ids = Vec::new();
                 for q in &d.questions {
-                    surveys::insert_ai(c, survey_id, q, false)?;
+                    ids.push(surveys::insert_ai(c, survey_id, q, false)?);
                 }
                 for q in &d.suggestions {
-                    surveys::insert_ai(c, survey_id, q, true)?;
+                    ids.push(surveys::insert_ai(c, survey_id, q, true)?);
+                }
+                // Every drafted question, suggestions included, goes to the critic.
+                let mut checks = checks.lock().unwrap_or_else(|e| e.into_inner());
+                for id in ids {
+                    checks.push(surveys::start_critique(c, id, critic::PROMPT_VERSION)?);
                 }
                 if !d.intro.is_empty() {
                     surveys::set_drafted_intro(c, survey_id, &d.intro)?;
@@ -234,7 +244,10 @@ pub async fn run(
                 surveys::set_draft_status(c, survey_id, DraftStatus::Failed, error.as_deref())
             }
         }))
-        .await
+        .await?;
+    // The draft is usable now; flags appear on each question as its check finishes.
+    let targets = std::mem::take(&mut *to_check.lock().unwrap_or_else(|e| e.into_inner()));
+    critic::run(targets, job.model, llm, limiter, writer).await
 }
 
 async fn draft(
@@ -398,9 +411,28 @@ mod tests {
         (dir, path, s.id)
     }
 
+    fn is_critic(r: &StructuredRequest) -> bool {
+        r.prompt.starts_with("Check this survey question")
+    }
+
+    /// The critic flags the first core question and passes the rest.
+    fn critic_reply(r: &StructuredRequest) -> Value {
+        if r.prompt.contains("Q question 1 about") {
+            json!({ "flags": [{ "issue": "double_barrelled", "note": "Asks two things." }] })
+        } else {
+            json!({ "flags": [] })
+        }
+    }
+
     #[tokio::test]
     async fn draft_saves_pending_core_questions_and_inactive_suggestions() {
-        let llm = ScriptedLlm::new(|_, _| Ok(sample_reply(10, 6)));
+        let llm = ScriptedLlm::new(|r, _| {
+            Ok(if is_critic(r) {
+                critic_reply(r)
+            } else {
+                sample_reply(10, 6)
+            })
+        });
         let (_d, path, id) = run_with(llm.clone()).await;
         let s = surveys::get(&crate::db::open(&path).unwrap(), id).unwrap();
         assert_eq!(s.draft_status, DraftStatus::Ready);
@@ -413,22 +445,44 @@ mod tests {
         assert!(s.intro.contains("no right or wrong"));
         // The drafter sees the brief; it never sees personas.
         assert!(!llm.requests()[0].prompt.contains("persona"));
+
+        // The critic checked every drafted question, suggestions included, one call each.
+        let critic_calls: Vec<_> = llm.requests().into_iter().filter(is_critic).collect();
+        assert_eq!(critic_calls.len(), 16);
+        for q in s.questions.iter().chain(&s.suggestions) {
+            let c = q.critique.as_ref().expect("critique stored");
+            assert_eq!(c.status, crate::model::CriticStatus::Done);
+            assert_eq!(c.prompt_version, "critic.v1");
+            assert_eq!(
+                c.flags.len(),
+                usize::from(q.body.text.starts_with("Q question 1 "))
+            );
+        }
+        // It sees one question and its options, never the objective or rationale.
+        for r in &critic_calls {
+            assert!(!r.prompt.contains("Purchase intent") && !r.prompt.contains("Measures intent"));
+        }
     }
 
     #[tokio::test]
     async fn a_bad_reply_is_retried_once_then_the_draft_fails_cleanly() {
-        let llm = ScriptedLlm::new(|_, i| {
-            Ok(if i == 0 {
+        let llm = ScriptedLlm::new(|r, i| {
+            Ok(if is_critic(r) {
+                critic_reply(r)
+            } else if i == 0 {
                 json!({"title": "", "intro": "", "questions": [], "suggestions": []})
             } else {
                 sample_reply(10, 6)
             })
         });
         let (_d, path, id) = run_with(llm.clone()).await;
-        assert_eq!(llm.calls(), 2);
-        assert!(llm.requests()[1]
-            .prompt
-            .contains("previous reply was rejected"));
+        let drafts: Vec<_> = llm
+            .requests()
+            .into_iter()
+            .filter(|r| !is_critic(r))
+            .collect();
+        assert_eq!(drafts.len(), 2);
+        assert!(drafts[1].prompt.contains("previous reply was rejected"));
         assert_eq!(
             surveys::get(&crate::db::open(&path).unwrap(), id)
                 .unwrap()
