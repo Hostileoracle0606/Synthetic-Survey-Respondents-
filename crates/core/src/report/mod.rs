@@ -22,6 +22,35 @@ use crate::sampling::population::{AGE_BANDS, INCOMES};
 pub const LOW_BASE: u32 = 30;
 const HISTOGRAM_BINS: usize = 8;
 
+/// A stored answer, unpacked from `answer_json` into plain fields (a JSON map per answer
+/// costs several times more memory, which matters at 1,000 × 50 answers).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Parsed {
+    pub code: Option<String>,
+    pub codes: Vec<String>,
+    pub value: Option<f64>,
+    pub text: Option<String>,
+}
+
+impl Parsed {
+    fn from_json(text: &str) -> Self {
+        let v: Value = serde_json::from_str(text).unwrap_or(Value::Null);
+        Parsed {
+            code: v["code"].as_str().map(str::to_string),
+            codes: v["codes"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|c| c.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            value: v["value"].as_f64(),
+            text: v["text"].as_str().map(str::to_string),
+        }
+    }
+}
+
 /// One stored answer with the respondent's attributes.
 #[derive(Debug, Clone)]
 pub(crate) struct Answer {
@@ -29,7 +58,7 @@ pub(crate) struct Answer {
     pub question_id: i64,
     pub respondent_id: i64,
     pub status: String,
-    pub answer: Value,
+    pub answer: Parsed,
     /// Option codes in the order this respondent saw them (choice questions).
     pub shown: Vec<String>,
 }
@@ -102,9 +131,7 @@ pub(crate) fn load(conn: &Connection, run_id: i64) -> AppResult<RunData> {
                 question_id: r.get(1)?,
                 respondent_id: r.get(2)?,
                 status: r.get(3)?,
-                answer: json
-                    .and_then(|j| serde_json::from_str(&j).ok())
-                    .unwrap_or(Value::Null),
+                answer: json.as_deref().map(Parsed::from_json).unwrap_or_default(),
                 shown: r
                     .get::<_, Option<String>>(5)?
                     .and_then(|j| serde_json::from_str(&j).ok())
@@ -199,21 +226,11 @@ pub fn chart_for(q: &Question) -> ChartKind {
 /// The keys an answer counts toward: option codes, the scale point, or theme ids.
 fn keys_of(q: &Question, a: &Answer, data: &RunData) -> Vec<String> {
     match q.body.question_type {
-        QuestionType::SingleChoice => a.answer["code"]
-            .as_str()
-            .map(str::to_string)
-            .into_iter()
-            .collect(),
-        QuestionType::MultiChoice => a.answer["codes"]
-            .as_array()
-            .map(|v| {
-                v.iter()
-                    .filter_map(|c| c.as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default(),
-        QuestionType::Likert => a.answer["value"]
-            .as_f64()
+        QuestionType::SingleChoice => a.answer.code.clone().into_iter().collect(),
+        QuestionType::MultiChoice => a.answer.codes.clone(),
+        QuestionType::Likert => a
+            .answer
+            .value
             .map(|v| format!("{}", v as i64))
             .into_iter()
             .collect(),
@@ -295,10 +312,7 @@ fn question_report(q: &Question, data: &RunData) -> QuestionReport {
         })
         .collect();
     let values: Vec<f64> = {
-        let mut v: Vec<f64> = valid
-            .iter()
-            .filter_map(|a| a.answer["value"].as_f64())
-            .collect();
+        let mut v: Vec<f64> = valid.iter().filter_map(|a| a.answer.value).collect();
         v.sort_by(f64::total_cmp);
         v
     };
@@ -339,7 +353,7 @@ fn question_report(q: &Question, data: &RunData) -> QuestionReport {
     let mut themes = Vec::new();
     let mut sample_answers = Vec::new();
     if q.body.question_type == QuestionType::OpenEnded {
-        let text = |a: &Answer| a.answer["text"].as_str().unwrap_or_default().to_string();
+        let text = |a: &Answer| a.answer.text.clone().unwrap_or_default();
         for (id, label, description) in data.themes.get(&q.id).into_iter().flatten() {
             let tagged: Vec<&&Answer> = valid
                 .iter()
@@ -367,7 +381,7 @@ fn question_report(q: &Question, data: &RunData) -> QuestionReport {
     let positions: Vec<(usize, usize)> = valid
         .iter()
         .filter_map(|a| {
-            let code = a.answer["code"].as_str()?;
+            let code = a.answer.code.as_deref()?;
             let pos = a.shown.iter().position(|c| c == code)?;
             Some((pos, a.shown.len()))
         })
@@ -540,10 +554,7 @@ pub(crate) fn crosstab_from(
                     *counts.entry(k).or_default() += 1;
                 }
             }
-            let values: Vec<f64> = members
-                .iter()
-                .filter_map(|a| a.answer["value"].as_f64())
-                .collect();
+            let values: Vec<f64> = members.iter().filter_map(|a| a.answer.value).collect();
             CrossTabGroup {
                 label: label.clone(),
                 n,

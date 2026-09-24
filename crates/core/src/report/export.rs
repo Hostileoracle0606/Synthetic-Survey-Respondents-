@@ -2,18 +2,15 @@
 //! the app to a path the user picks; nothing is uploaded. The API key never appears: it is
 //! only ever in the OS keychain, never in the database these come from.
 
+use std::io::Write;
+
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
 use super::{load, synthesis, Person};
 use crate::db::{cohorts, projects, runs, surveys};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult, ErrorCode};
 use crate::model::QuestionType;
-
-/// Indented JSON for the export file.
-pub fn pretty(v: &Value) -> String {
-    serde_json::to_string_pretty(v).unwrap_or_default()
-}
 
 /// One CSV cell. Quotes when needed; text that Excel would run as a formula gets a leading
 /// apostrophe (AI-written answers must never execute in a spreadsheet).
@@ -119,7 +116,7 @@ pub fn csv(conn: &Connection, run_id: i64) -> AppResult<String> {
             match q.body.question_type {
                 QuestionType::SingleChoice => {
                     let label = a
-                        .and_then(|a| a.answer["code"].as_str())
+                        .and_then(|a| a.answer.code.as_deref())
                         .and_then(|c| q.body.options.iter().find(|o| o.code == c))
                         .map(|o| o.label.as_str())
                         .unwrap_or_default();
@@ -127,8 +124,7 @@ pub fn csv(conn: &Connection, run_id: i64) -> AppResult<String> {
                 }
                 QuestionType::MultiChoice => {
                     let chosen: Vec<&str> = a
-                        .and_then(|a| a.answer["codes"].as_array())
-                        .map(|v| v.iter().filter_map(|c| c.as_str()).collect())
+                        .map(|a| a.answer.codes.iter().map(String::as_str).collect())
                         .unwrap_or_default();
                     for o in &q.body.options {
                         row.push(match a {
@@ -143,11 +139,10 @@ pub fn csv(conn: &Connection, run_id: i64) -> AppResult<String> {
                     }
                 }
                 QuestionType::Likert | QuestionType::Numeric => {
-                    row.push(num(a.and_then(|a| a.answer["value"].as_f64())))
+                    row.push(num(a.and_then(|a| a.answer.value)))
                 }
                 QuestionType::OpenEnded => row.push(cell(
-                    a.and_then(|a| a.answer["text"].as_str())
-                        .unwrap_or_default(),
+                    a.and_then(|a| a.answer.text.as_deref()).unwrap_or_default(),
                     true,
                 )),
             }
@@ -160,8 +155,9 @@ pub fn csv(conn: &Connection, run_id: i64) -> AppResult<String> {
 
 /// Everything needed to audit or reproduce the run: project, cohort (config and people),
 /// survey (questions and review history), run settings, every answer with its reason, the
-/// theme coding and the synthesis.
-pub fn json(conn: &Connection, run_id: i64) -> AppResult<Value> {
+/// theme coding and the synthesis. Written as it is read, one respondent and one answer at
+/// a time, so a 1,000 × 50 run never sits in memory as a whole (TEST_PLAN S7).
+pub fn write_json(conn: &Connection, run_id: i64, out: &mut impl Write) -> AppResult<()> {
     let run = runs::get(conn, run_id)?;
     let project = projects::get_project(conn, run.project_id)?;
     let cohort = cohorts::get(conn, run.cohort_id)?;
@@ -178,13 +174,6 @@ pub fn json(conn: &Connection, run_id: i64) -> AppResult<Value> {
             }))
         },
     )?;
-    let respondents: Vec<Value> = conn
-        .prepare("SELECT id FROM respondents WHERE cohort_id = ?1 ORDER BY ordinal")?
-        .query_map([run.cohort_id], |r| r.get::<_, i64>(0))?
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .map(|id| cohorts::detail(conn, id).map(|d| serde_json::to_value(d).unwrap_or_default()))
-        .collect::<AppResult<_>>()?;
     let survey = surveys::get(conn, run.survey_id)?;
     let history: Vec<Value> = conn
         .prepare(
@@ -200,20 +189,6 @@ pub fn json(conn: &Connection, run_id: i64) -> AppResult<Value> {
             }))
         })?
         .collect::<Result<_, _>>()?;
-    let answers: Vec<Value> = conn
-        .prepare(
-            "SELECT p.ordinal, q.code, x.status, x.answer_json, x.reasoning, x.shown_options_json
-             FROM responses x JOIN respondents p ON p.id = x.respondent_id JOIN questions q ON q.id = x.question_id
-             WHERE x.run_id = ?1 ORDER BY p.ordinal, q.order_index",
-        )?
-        .query_map([run_id], |r| {
-            let parse = |s: Option<String>| s.and_then(|s| serde_json::from_str::<Value>(&s).ok());
-            Ok(json!({
-                "respondent": r.get::<_, u32>(0)?, "question": r.get::<_, String>(1)?, "status": r.get::<_, String>(2)?,
-                "answer": parse(r.get(3)?), "reason": r.get::<_, Option<String>>(4)?, "shownOptions": parse(r.get(5)?),
-            }))
-        })?
-        .collect::<Result<_, _>>()?;
     let themes: Vec<Value> = conn
         .prepare(
             "SELECT t.id, q.code, t.label, t.description,
@@ -225,20 +200,74 @@ pub fn json(conn: &Connection, run_id: i64) -> AppResult<Value> {
                 "description": r.get::<_, Option<String>>(3)?, "count": r.get::<_, i64>(4)? }))
         })?
         .collect::<Result<_, _>>()?;
-    Ok(json!({
-        "format": "synthetic-survey-export/1",
-        "disclosure": format!(
-            "Synthetic respondents — directional only; not calibrated against real survey data. Every answer was written by an AI model playing a persona; these are not real people. Model {}, prompt {}.",
-            run.model, run.prompt_version
-        ),
-        "project": project,
-        "cohort": { "id": cohort.id, "name": cohort.name, "config": cohort.config, "respondents": respondents },
-        "survey": { "id": survey.id, "title": survey.title, "intro": survey.intro, "questions": survey.questions, "review": history },
-        "run": { "id": run_id, "settings": settings, "respondentsDone": run.respondents_done },
-        "answers": answers,
-        "themes": themes,
-        "synthesis": synthesis(conn, run_id)?,
-    }))
+    let disclosure = format!(
+        "Synthetic respondents — directional only; not calibrated against real survey data. Every answer was written by an AI model playing a persona; these are not real people. Model {}, prompt {}.",
+        run.model, run.prompt_version
+    );
+
+    let io = |e: std::io::Error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!("could not write the export: {e}"),
+        )
+    };
+    let mut put = |text: &str| out.write_all(text.as_bytes()).map_err(io);
+    put("{\"format\":\"synthetic-survey-export/1\",\"disclosure\":")?;
+    put(&serde_json::to_string(&disclosure)?)?;
+    put(",\"project\":")?;
+    put(&serde_json::to_string(&project)?)?;
+    put(",\"cohort\":")?;
+    let head = json!({ "id": cohort.id, "name": cohort.name, "config": cohort.config }).to_string();
+    put(&head[..head.len() - 1])?; // reopen the object to add the respondents
+    put(",\"respondents\":[")?;
+    let ids: Vec<i64> = conn
+        .prepare("SELECT id FROM respondents WHERE cohort_id = ?1 ORDER BY ordinal")?
+        .query_map([run.cohort_id], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    for (i, id) in ids.iter().enumerate() {
+        if i > 0 {
+            put(",")?;
+        }
+        put(&serde_json::to_string(&cohorts::detail(conn, *id)?)?)?;
+    }
+    put("]},\"survey\":")?;
+    put(&json!({ "id": survey.id, "title": survey.title, "intro": survey.intro, "questions": survey.questions, "review": history }).to_string())?;
+    put(",\"run\":")?;
+    put(
+        &json!({ "id": run_id, "settings": settings, "respondentsDone": run.respondents_done })
+            .to_string(),
+    )?;
+    put(",\"answers\":[")?;
+    let mut stmt = conn.prepare(
+        "SELECT p.ordinal, q.code, x.status, x.answer_json, x.reasoning, x.shown_options_json
+         FROM responses x JOIN respondents p ON p.id = x.respondent_id JOIN questions q ON q.id = x.question_id
+         WHERE x.run_id = ?1 ORDER BY p.ordinal, q.order_index",
+    )?;
+    let mut rows = stmt.query([run_id])?;
+    let mut first = true;
+    while let Some(r) = rows.next()? {
+        let parse = |s: Option<String>| s.and_then(|s| serde_json::from_str::<Value>(&s).ok());
+        let row = json!({
+            "respondent": r.get::<_, u32>(0)?, "question": r.get::<_, String>(1)?, "status": r.get::<_, String>(2)?,
+            "answer": parse(r.get(3)?), "reason": r.get::<_, Option<String>>(4)?, "shownOptions": parse(r.get(5)?),
+        });
+        put(if first { "" } else { "," })?;
+        first = false;
+        put(&row.to_string())?;
+    }
+    put("],\"themes\":")?;
+    put(&serde_json::to_string(&themes)?)?;
+    put(",\"synthesis\":")?;
+    put(&serde_json::to_string(&synthesis(conn, run_id)?)?)?;
+    put("}")?;
+    out.flush().map_err(io)
+}
+
+/// The whole export as a value (small runs and tests).
+pub fn json(conn: &Connection, run_id: i64) -> AppResult<Value> {
+    let mut buf = Vec::new();
+    write_json(conn, run_id, &mut buf)?;
+    Ok(serde_json::from_slice(&buf)?)
 }
 
 #[cfg(test)]

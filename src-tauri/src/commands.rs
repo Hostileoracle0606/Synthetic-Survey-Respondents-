@@ -461,22 +461,15 @@ pub async fn export_run(
     format: ExportFormat,
 ) -> AppResult<Option<String>> {
     use tauri_plugin_dialog::DialogExt;
-    let (contents, ext, label) = {
-        let conn = lock(&state)?;
-        match format {
-            ExportFormat::Csv => (export::csv(&conn, run_id)?, "csv", "CSV (Excel)"),
-            ExportFormat::Json => (
-                export::pretty(&export::json(&conn, run_id)?),
-                "json",
-                "JSON",
-            ),
-        }
+    let (ext, label) = match format {
+        ExportFormat::Csv => ("csv", "CSV (Excel)"),
+        ExportFormat::Json => ("json", "JSON"),
     };
-    let title = projects::get_project(
-        &*lock(&state)?,
-        runs::get(&*lock(&state)?, run_id)?.project_id,
-    )?
-    .title;
+    let title = {
+        let conn = lock(&state)?;
+        let project_id = runs::get(&conn, run_id)?.project_id;
+        projects::get_project(&conn, project_id)?.title
+    };
     let name: String = title
         .chars()
         .map(|c| {
@@ -499,8 +492,18 @@ pub async fn export_run(
     let Some(path) = picked.and_then(|p| p.into_path().ok()) else {
         return Ok(None);
     };
-    std::fs::write(&path, contents)
-        .map_err(|e| AppError::new(ErrorCode::Internal, format!("could not save the file: {e}")))?;
+    let saving = |e: std::io::Error| {
+        AppError::new(ErrorCode::Internal, format!("could not save the file: {e}"))
+    };
+    let conn = lock(&state)?;
+    match format {
+        ExportFormat::Csv => std::fs::write(&path, export::csv(&conn, run_id)?).map_err(saving)?,
+        ExportFormat::Json => {
+            // Streamed straight to the file, so large runs never sit in memory whole.
+            let mut file = std::io::BufWriter::new(std::fs::File::create(&path).map_err(saving)?);
+            export::write_json(&conn, run_id, &mut file)?;
+        }
+    }
     Ok(Some(path.display().to_string()))
 }
 

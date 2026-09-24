@@ -84,11 +84,7 @@ async fn inner(
             .answers
             .iter()
             .filter(|a| a.question_id == q.id && a.status == "valid")
-            .filter_map(|a| {
-                a.answer["text"]
-                    .as_str()
-                    .map(|t| (a.response_id, t.to_string()))
-            })
+            .filter_map(|a| a.answer.text.as_ref().map(|t| (a.response_id, t.clone())))
             .collect();
         if answers.is_empty() {
             continue;

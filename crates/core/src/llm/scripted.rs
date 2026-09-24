@@ -21,6 +21,7 @@ pub struct ScriptedLlm {
     in_flight: Arc<AtomicUsize>,
     max_in_flight: Arc<AtomicUsize>,
     requests: Arc<Mutex<Vec<StructuredRequest>>>,
+    log_requests: bool,
 }
 
 impl ScriptedLlm {
@@ -35,11 +36,18 @@ impl ScriptedLlm {
             in_flight: Arc::default(),
             max_in_flight: Arc::default(),
             requests: Arc::default(),
+            log_requests: true,
         }
     }
 
     pub fn with_delay(mut self, delay: Duration) -> Self {
         self.delay = delay;
+        self
+    }
+
+    /// Don't keep a copy of every request (memory tests measure the engine, not the fake).
+    pub fn without_request_log(mut self) -> Self {
+        self.log_requests = false;
         self
     }
 
@@ -63,7 +71,9 @@ impl LlmProvider for ScriptedLlm {
         req: &StructuredRequest,
     ) -> Result<StructuredResponse, LlmError> {
         let index = self.calls.fetch_add(1, Ordering::SeqCst);
-        self.requests.lock().unwrap().push(req.clone());
+        if self.log_requests {
+            self.requests.lock().unwrap().push(req.clone());
+        }
         let now = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
         self.max_in_flight.fetch_max(now, Ordering::SeqCst);
         if !self.delay.is_zero() {
