@@ -238,9 +238,7 @@ async fn live_survey_draft() {
     use survey_core::model::ResearchType;
     let c = client();
     let models = c.list_models().await.expect("list_models");
-    let model = survey_core::llm::gemini::newest_stable(&models, "pro")
-        .or_else(|| survey_core::llm::gemini::newest_stable_flash(&models))
-        .expect("a model");
+    let model = survey_core::llm::gemini::drafting_model(&models).expect("a model");
     let brief = DraftBrief {
         research_type: ResearchType::MarketResponse,
         product_category: Some("mobile_phone".into()),

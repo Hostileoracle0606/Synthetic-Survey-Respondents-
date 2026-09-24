@@ -914,10 +914,7 @@ mod tests {
         // Always leaves out Q2.
         let llm = ScriptedLlm::new(|req, _| {
             let mut v = reply_for_prompt(&req.prompt);
-            v["answers"]
-                .as_array_mut()
-                .unwrap()
-                .retain(|a| a["code"] != "Q2");
+            v.as_object_mut().unwrap().remove("Q2");
             Ok(v)
         });
         let (_tx, rx) = watch::channel(Mode::Run);
@@ -994,6 +991,62 @@ mod tests {
         );
         // Shuffling spread the chosen options, so variance alone looks healthy.
         assert!(v.entropy.unwrap() > 0.8);
+    }
+
+    /// Review fixes: a paused run can't resume on an edited survey; a question with answers
+    /// can't be edited in place; a report lists only what its run asked; launch recovery
+    /// unsticks drafts and syntheses left generating.
+    #[tokio::test]
+    async fn runs_stay_tied_to_the_survey_they_asked() {
+        let e = env(6, 2);
+        let id = start(&e, 2);
+        let (_tx, rx) = watch::channel(Mode::Run);
+        go(&e, id, &good(), 2, rx).await;
+        let conn = e.conn();
+        let q1 = conn
+            .query_row("SELECT id FROM questions WHERE code = 'Q1'", [], |r| {
+                r.get::<_, i64>(0)
+            })
+            .unwrap();
+
+        // Editing an answered question in place is refused; deleting retires it instead.
+        let mut body = surveys::question(&conn, q1).unwrap().body;
+        body.text = "Changed?".into();
+        let err = surveys::update_question(&conn, q1, body).err().unwrap();
+        assert!(err.message.contains("already has answers"));
+
+        // A question added afterwards doesn't appear in this run's report.
+        let survey_id = surveys::for_project(&conn, 1).unwrap().id;
+        let added = surveys::add_question(&conn, survey_id).unwrap();
+        let rep = crate::report::report(&conn, id).unwrap();
+        assert_eq!(rep.questions.len(), 2);
+        assert!(rep.questions.iter().all(|q| q.question_id != added.id));
+
+        // Resuming (re-planning) this run on the changed survey is refused.
+        conn.execute(
+            "UPDATE simulation_runs SET status = 'paused' WHERE id = ?1",
+            [id],
+        )
+        .unwrap();
+        assert!(runs::plan(&conn, id)
+            .err()
+            .unwrap()
+            .message
+            .contains("survey changed"));
+
+        // Launch recovery unsticks background jobs left generating.
+        conn.execute_batch(
+            "UPDATE surveys SET draft_status = 'generating'; UPDATE simulation_runs SET synthesis_status = 'generating';",
+        )
+        .unwrap();
+        runs::recover_on_launch(&conn).unwrap();
+        assert_eq!(
+            surveys::get(&conn, survey_id).unwrap().draft_status,
+            crate::model::DraftStatus::Failed
+        );
+        let rep = crate::report::report(&conn, id).unwrap();
+        assert_eq!(rep.synthesis_status, crate::model::SynthesisStatus::Failed);
+        assert!(rep.synthesis_error.unwrap().contains("app closed"));
     }
 
     /// SPEC §11: the same run config and seed gives identical option orders.

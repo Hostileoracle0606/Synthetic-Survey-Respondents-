@@ -109,12 +109,22 @@ pub(crate) struct RunData {
 pub(crate) fn load(conn: &Connection, run_id: i64) -> AppResult<RunData> {
     let run = runs::get(conn, run_id)?;
     let survey = surveys::get(conn, run.survey_id)?;
-    // Questions answered in this run, in survey order (a later edit may have retired one).
+    // The questions this run asked, in survey order: ones added later for another run are
+    // left out, and ones retired since are kept. Before any answers, the current survey.
     let answered: Vec<i64> = conn
         .prepare("SELECT DISTINCT question_id FROM responses WHERE run_id = ?1")?
         .query_map([run_id], |r| r.get(0))?
         .collect::<Result<_, _>>()?;
-    let mut questions: Vec<Question> = survey.questions.clone();
+    let mut questions: Vec<Question> = if answered.is_empty() {
+        survey.questions.clone()
+    } else {
+        survey
+            .questions
+            .iter()
+            .filter(|q| answered.contains(&q.id))
+            .cloned()
+            .collect()
+    };
     for id in answered {
         if !questions.iter().any(|q| q.id == id) {
             questions.push(surveys::question(conn, id)?);

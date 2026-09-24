@@ -210,7 +210,10 @@ mod tests {
         )
         .await;
         assert!(r.pass);
-        assert_eq!(r.prompt_version, "answer.v1");
+        assert_eq!(
+            r.prompt_version,
+            survey_core::engine::answer::PROMPT_VERSION
+        );
         assert_eq!(judge_llm.calls(), 1);
     }
 

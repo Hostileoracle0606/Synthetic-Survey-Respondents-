@@ -10,7 +10,7 @@ pub mod judge;
 use std::sync::Arc;
 
 use survey_core::engine::limiter::{Limits, RateLimiter};
-use survey_core::llm::gemini::{newest_stable, GeminiClient};
+use survey_core::llm::gemini::{drafting_model, newest_stable, GeminiClient};
 use survey_core::AppError;
 
 pub fn client() -> Result<GeminiClient, String> {
@@ -22,7 +22,7 @@ pub fn client() -> Result<GeminiClient, String> {
 pub async fn models(c: &GeminiClient) -> Result<(String, String), String> {
     let list = c.list_models().await.map_err(|e| e.to_string())?;
     let flash = newest_stable(&list, "flash").ok_or("no stable Flash model for this key")?;
-    let pro = newest_stable(&list, "pro").unwrap_or_else(|| flash.clone());
+    let pro = drafting_model(&list).unwrap_or_else(|| flash.clone());
     Ok((flash, pro))
 }
 

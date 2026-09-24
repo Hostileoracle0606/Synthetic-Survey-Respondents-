@@ -282,7 +282,7 @@ export const mock = {
     const s = ensureSurvey();
     if (s.questions.some((x) => x.reviewStatus !== "accepted")) throw { code: "survey_not_approved", message: "Every question must be approved first." };
     s.status = "approved";
-    run = { id: (run?.id ?? 0) + 1, projectId: s.projectId, surveyId: s.id, cohortId: cohort?.id ?? 1, status: "running", model: "gemini-mock-flash", promptVersion: "answer.v1", respondents: people.length, questions: s.questions.length, answered: 0, respondentsDone: 0, error: null, createdAt: new Date().toISOString() };
+    run = { id: (run?.id ?? 0) + 1, projectId: s.projectId, surveyId: s.id, cohortId: cohort?.id ?? 1, status: "running", model: "gemini-mock-flash", promptVersion: "answer.v2", respondents: people.length, questions: s.questions.length, answered: 0, respondentsDone: 0, error: null, createdAt: new Date().toISOString() };
     tickRun(onProgress);
     return structuredClone(run);
   },

@@ -10,8 +10,8 @@ use serde_json::{json, Value};
 use crate::llm::StructuredRequest;
 use crate::model::{Question, QuestionType, RespondentDetail};
 
-pub const PROMPT_VERSION: &str = "answer.v1";
-const SYSTEM: &str = include_str!("../../prompts/answer.v1.md");
+pub const PROMPT_VERSION: &str = "answer.v2";
+const SYSTEM: &str = include_str!("../../prompts/answer.v2.md");
 pub const TEMPERATURE: f32 = 1.0;
 
 /// Option codes in the order this respondent sees them. Seeded by run seed, respondent and
@@ -107,28 +107,55 @@ fn describe(q: &Question, shown: &[String]) -> String {
     s
 }
 
-pub fn reply_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "answers": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "code": { "type": "string" },
-                        "choice": { "type": "integer" },
-                        "choices": { "type": "array", "items": { "type": "integer" } },
-                        "value": { "type": "number" },
-                        "text": { "type": "string" },
-                        "reason": { "type": "string" }
-                    },
-                    "required": ["code", "reason"]
-                }
+/// A schema built from this survey: one required entry per question code, holding exactly
+/// the field its type needs, with its range (Gemini enforces these, so a choice question can't
+/// be answered with free text).
+pub fn reply_schema(questions: &[(&Question, Vec<String>)]) -> Value {
+    let reason = json!({ "type": "string" });
+    let mut props = serde_json::Map::new();
+    for (q, shown) in questions {
+        let k = shown.len().max(1);
+        let (field, spec) = match q.body.question_type {
+            QuestionType::SingleChoice => (
+                "choice",
+                json!({ "type": "integer", "minimum": 1, "maximum": k }),
+            ),
+            QuestionType::MultiChoice => (
+                "choices",
+                json!({
+                    "type": "array",
+                    "items": { "type": "integer", "minimum": 1, "maximum": k },
+                    "minItems": 1,
+                    "maxItems": q.body.max_choices.unwrap_or(k as u32)
+                }),
+            ),
+            QuestionType::Likert => {
+                let s = q.body.scale.as_ref().expect("likert has a scale");
+                (
+                    "value",
+                    json!({ "type": "integer", "minimum": s.min, "maximum": s.max }),
+                )
             }
-        },
-        "required": ["answers"]
-    })
+            QuestionType::Numeric => {
+                let r = q.body.numeric.as_ref().expect("numeric has a range");
+                (
+                    "value",
+                    json!({ "type": "number", "minimum": r.min, "maximum": r.max }),
+                )
+            }
+            QuestionType::OpenEnded => ("text", json!({ "type": "string" })),
+        };
+        props.insert(
+            q.code.clone(),
+            json!({
+                "type": "object",
+                "properties": { field: spec, "reason": reason },
+                "required": [field, "reason"]
+            }),
+        );
+    }
+    let required: Vec<&str> = questions.iter().map(|(q, _)| q.code.as_str()).collect();
+    json!({ "type": "object", "properties": props, "required": required })
 }
 
 /// Instructions first (identical for every call, so Gemini's implicit cache can reuse them),
@@ -155,7 +182,7 @@ pub fn build_request(
         model: model.to_string(),
         system: SYSTEM.to_string(),
         prompt,
-        schema: reply_schema(),
+        schema: reply_schema(questions),
         temperature: TEMPERATURE,
         max_output_tokens: 8_192,
     }
@@ -182,6 +209,15 @@ pub fn check(q: &Question, shown: &[String], a: &Value) -> Result<Checked, Strin
             .contains(&i)
             .then(|| shown[i as usize - 1].clone())
     };
+    // Fallback: the option's exact text instead of its number.
+    let by_label = |v: &Value| -> Option<String> {
+        let t = v.as_str()?.trim().to_lowercase();
+        q.body
+            .options
+            .iter()
+            .find(|o| shown.contains(&o.code) && o.label.trim().to_lowercase() == t)
+            .map(|o| o.code.clone())
+    };
     let mut c = Checked {
         answer_json: Value::Null,
         code: None,
@@ -192,13 +228,15 @@ pub fn check(q: &Question, shown: &[String], a: &Value) -> Result<Checked, Strin
     };
     match q.body.question_type {
         QuestionType::SingleChoice => {
-            let code = pick(&a["choice"]).ok_or_else(|| {
-                format!(
-                    "{}: \"choice\" must be one number from 1 to {}",
-                    q.code,
-                    shown.len()
-                )
-            })?;
+            let code = pick(&a["choice"])
+                .or_else(|| by_label(&a["choice"]).or_else(|| by_label(&a["text"])))
+                .ok_or_else(|| {
+                    format!(
+                        "{}: \"choice\" must be one number from 1 to {}",
+                        q.code,
+                        shown.len()
+                    )
+                })?;
             c.answer_json = json!({ "code": code });
             c.code = Some(code);
         }
@@ -275,15 +313,20 @@ pub fn check_reply(
     questions: &[(&Question, Vec<String>)],
     reply: &Value,
 ) -> Vec<Result<Checked, String>> {
-    let answers = reply["answers"].as_array().cloned().unwrap_or_default();
+    // Replies are keyed by question code; a list of {"code": …} entries is accepted too.
+    let listed = reply["answers"].as_array().cloned().unwrap_or_default();
     questions
         .iter()
         .map(|(q, shown)| {
-            let a = answers
-                .iter()
-                .find(|a| a["code"].as_str().map(str::trim) == Some(q.code.as_str()))
-                .ok_or_else(|| format!("{}: no answer", q.code))?;
-            check(q, shown, a)
+            let a = match reply.get(&q.code) {
+                Some(a) if a.is_object() => a.clone(),
+                _ => listed
+                    .iter()
+                    .find(|a| a["code"].as_str().map(str::trim) == Some(q.code.as_str()))
+                    .cloned()
+                    .ok_or_else(|| format!("{}: no answer", q.code))?,
+            };
+            check(q, shown, &a)
         })
         .collect()
 }
@@ -315,29 +358,29 @@ pub fn display(q: &Question, c: &Checked) -> String {
 /// Test helper: a valid reply for the questions as they appear in a prompt built by
 /// `build_request` (codes in brackets). Picks option 1, the scale minimum, the range minimum.
 pub fn reply_for_prompt(prompt: &str) -> Value {
-    let mut answers = Vec::new();
+    let mut answers = serde_json::Map::new();
     for line in prompt.lines() {
         if let Some(rest) = line.strip_prefix('[') {
             let Some((code, kind)) = rest.split_once("] ") else {
                 continue;
             };
             let a = if kind.starts_with("(pick one") {
-                json!({ "code": code, "choice": 1, "reason": "It fits me." })
+                json!({ "choice": 1, "reason": "It fits me." })
             } else if kind.starts_with("(pick up to") {
-                json!({ "code": code, "choices": [1], "reason": "It fits me." })
+                json!({ "choices": [1], "reason": "It fits me." })
             } else if let Some(r) = kind.strip_prefix("(scale ") {
                 let min: f64 = r.split_whitespace().next().unwrap().parse().unwrap();
-                json!({ "code": code, "value": min, "reason": "Not keen." })
+                json!({ "value": min, "reason": "Not keen." })
             } else if let Some(r) = kind.strip_prefix("(a number from ") {
                 let min: f64 = r.split_whitespace().next().unwrap().parse().unwrap();
-                json!({ "code": code, "value": min, "reason": "Budget." })
+                json!({ "value": min, "reason": "Budget." })
             } else {
-                json!({ "code": code, "text": "It depends on the price.", "reason": "Honest view." })
+                json!({ "text": "It depends on the price.", "reason": "Honest view." })
             };
-            answers.push(a);
+            answers.insert(code.to_string(), a);
         }
     }
-    json!({ "answers": answers })
+    Value::Object(answers)
 }
 
 #[cfg(test)]
@@ -460,6 +503,61 @@ mod tests {
         );
         assert!(res[0].is_ok());
         assert_eq!(res[1].as_ref().unwrap_err(), "O: no answer");
+    }
+
+    #[test]
+    fn the_schema_requires_the_right_field_for_each_question() {
+        let s = q(1, "S", QuestionType::SingleChoice);
+        let m = q(2, "M", QuestionType::MultiChoice);
+        let l = q(3, "L", QuestionType::Likert);
+        let o = q(4, "O", QuestionType::OpenEnded);
+        let pairs = vec![
+            (&s, shown_order(&s, 1, 1)),
+            (&m, shown_order(&m, 1, 1)),
+            (&l, vec![]),
+            (&o, vec![]),
+        ];
+        let schema = reply_schema(&pairs);
+        assert_eq!(schema["required"], json!(["S", "M", "L", "O"]));
+        assert_eq!(
+            schema["properties"]["S"]["required"],
+            json!(["choice", "reason"])
+        );
+        assert_eq!(
+            schema["properties"]["S"]["properties"]["choice"]["maximum"],
+            4
+        );
+        assert_eq!(
+            schema["properties"]["M"]["properties"]["choices"]["maxItems"],
+            2
+        );
+        assert_eq!(
+            schema["properties"]["L"]["properties"]["value"]["maximum"],
+            7
+        );
+        assert_eq!(
+            schema["properties"]["O"]["required"],
+            json!(["text", "reason"])
+        );
+        assert_eq!(build_request("m", "", &pairs, "p").schema, schema);
+    }
+
+    /// Seen live: Gemini answered a choice question with the option's text.
+    #[test]
+    fn a_choice_given_as_the_option_text_is_accepted() {
+        let s = q(1, "S", QuestionType::SingleChoice);
+        let shown = shown_order(&s, 1, 1);
+        let c = check(&s, &shown, &json!({"text": " samsung ", "reason": "r"})).unwrap();
+        assert_eq!(c.code.as_deref(), Some("B"));
+        assert!(check(&s, &shown, &json!({"text": "Nokia", "reason": "r"})).is_err());
+        // Keyed replies and the older list form both work.
+        let pairs = vec![(&s, shown.clone())];
+        assert!(check_reply(&pairs, &json!({"S": {"choice": 1, "reason": "r"}}))[0].is_ok());
+        assert!(check_reply(
+            &pairs,
+            &json!({"answers": [{"code": "S", "choice": 1, "reason": "r"}]})
+        )[0]
+        .is_ok());
     }
 
     #[test]

@@ -12,7 +12,7 @@ use survey_core::engine::draft::{self, DraftBrief, DraftJob};
 use survey_core::engine::persona::PROMPT_VERSION;
 use survey_core::engine::run::{self as sim, Mode};
 use survey_core::engine::synthesis::{self, SynthesisJob};
-use survey_core::llm::gemini::{newest_stable, GeminiClient};
+use survey_core::llm::gemini::{drafting_model, newest_stable, GeminiClient};
 use survey_core::llm::LlmProvider;
 use survey_core::model::{
     Cohort, CohortConfig, CohortProgress, CohortSummary, CountryOption, CrossTab, DraftStatus,
@@ -59,12 +59,14 @@ async fn flash_model(state: &State<'_, AppState>, client: &GeminiClient) -> AppR
     })
 }
 
-/// Newest stable Pro for drafting, falling back to Flash when the key has no Pro access.
+/// Drafting, theme coding and synthesis: newest stable Pro, unless Flash is a newer generation.
 async fn draft_model(state: &State<'_, AppState>, client: &GeminiClient) -> AppResult<String> {
-    match newest_stable(&models(state, client).await?, "pro") {
-        Some(m) => Ok(m),
-        None => flash_model(state, client).await,
-    }
+    drafting_model(&models(state, client).await?).ok_or_else(|| {
+        AppError::new(
+            ErrorCode::Llm,
+            "no stable Gemini model is available to this key",
+        )
+    })
 }
 
 #[tauri::command]
@@ -342,7 +344,11 @@ pub async fn start_simulation(
             requests_left_today: left,
         },
     )?;
-    launch(&state, client, run.id, on_progress).await?;
+    if let Err(e) = launch(&state, client, run.id, on_progress).await {
+        // Don't leave a queued run behind: it would block every later start.
+        runs::set_status(&*lock(&state)?, run.id, RunStatus::Failed, Some(&e.message))?;
+        return Err(e);
+    }
     Ok(run)
 }
 

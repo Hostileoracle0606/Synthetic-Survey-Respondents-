@@ -406,6 +406,12 @@ pub fn add_question(conn: &Connection, survey_id: i64) -> AppResult<Question> {
 pub fn update_question(conn: &Connection, id: i64, body: QuestionBody) -> AppResult<Question> {
     let body = normalise(body)?;
     let survey_id = survey_of_question(conn, id)?;
+    // A run's report reads its questions from here; editing one it answered would rewrite it.
+    if answered(conn, id)? {
+        return Err(AppError::invalid(
+            "a simulation run already has answers to this question; delete it (the run keeps it for its report) and add a new one",
+        ));
+    }
     conn.execute(
         "UPDATE questions SET question_text = ?2, question_type = ?3, options_json = ?4,
             origin = CASE origin WHEN 'ai' THEN 'ai_edited' ELSE origin END,
@@ -464,18 +470,21 @@ pub fn reorder(conn: &Connection, survey_id: i64, ordered_ids: &[i64]) -> AppRes
     get(conn, survey_id)
 }
 
-/// Deletes a question, or retires it (inactive) if a run already has answers to it.
-pub fn delete_question(conn: &Connection, id: i64) -> AppResult<Survey> {
-    let survey_id = survey_of_question(conn, id)?;
-    let used: bool = conn
+fn answered(conn: &Connection, question_id: i64) -> AppResult<bool> {
+    Ok(conn
         .query_row(
             "SELECT 1 FROM responses WHERE question_id = ?1 LIMIT 1",
-            [id],
+            [question_id],
             |_| Ok(()),
         )
         .optional()?
-        .is_some();
-    if used {
+        .is_some())
+}
+
+/// Deletes a question, or retires it (inactive) if a run already has answers to it.
+pub fn delete_question(conn: &Connection, id: i64) -> AppResult<Survey> {
+    let survey_id = survey_of_question(conn, id)?;
+    if answered(conn, id)? {
         conn.execute(
             "UPDATE questions SET is_active = 0, review_status = 'rejected' WHERE id = ?1",
             [id],

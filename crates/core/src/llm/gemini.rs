@@ -351,10 +351,9 @@ mod tests {
     }
 }
 
-/// The newest stable model of a family ("flash" or "pro"): `gemini-<version>-<family>`,
-/// skipping previews, lite and dated variants. New API keys can't use older models, so the
-/// app picks from what `list_models` returns instead of hard-coding one.
-pub fn newest_stable(models: &[String], family: &str) -> Option<String> {
+/// Stable models of a family ("flash" or "pro") as (version, id): `gemini-<version>-<family>`,
+/// skipping previews, lite and dated variants.
+fn stable(models: &[String], family: &str) -> Vec<(Vec<u32>, String)> {
     let suffix = format!("-{family}");
     models
         .iter()
@@ -366,8 +365,27 @@ pub fn newest_stable(models: &[String], family: &str) -> Option<String> {
                 .collect::<Option<_>>()?;
             Some((parts, m.clone()))
         })
-        .max()
-        .map(|(_, m)| m)
+        .collect()
+}
+
+/// The newest stable model of a family. New API keys can't use older models, so the app
+/// picks from what `list_models` returns instead of hard-coding one.
+pub fn newest_stable(models: &[String], family: &str) -> Option<String> {
+    stable(models, family).into_iter().max().map(|(_, m)| m)
+}
+
+/// Model for drafting, theme coding and synthesis: the newest stable Pro, unless it is an
+/// older generation than the newest stable Flash (older generations get closed to new keys,
+/// e.g. `gemini-2.5-pro` once 3.x exists), in which case that Flash.
+pub fn drafting_model(models: &[String]) -> Option<String> {
+    let flash = stable(models, "flash").into_iter().max();
+    let pro = stable(models, "pro").into_iter().max();
+    match (pro, flash) {
+        (Some(p), Some(f)) if p.0 >= f.0 => Some(p.1),
+        (Some(p), None) => Some(p.1),
+        (_, Some(f)) => Some(f.1),
+        (None, None) => None,
+    }
 }
 
 pub fn newest_stable_flash(models: &[String]) -> Option<String> {
@@ -376,7 +394,7 @@ pub fn newest_stable_flash(models: &[String]) -> Option<String> {
 
 #[cfg(test)]
 mod pick_tests {
-    use super::{newest_stable, newest_stable_flash};
+    use super::{drafting_model, newest_stable, newest_stable_flash};
 
     #[test]
     fn picks_the_highest_plain_flash_version() {
@@ -400,5 +418,15 @@ mod pick_tests {
             newest_stable(&models, "pro").as_deref(),
             Some("gemini-3.1-pro")
         );
+        // Pro 3.1 is older than Flash 3.8: draft with the Flash (seen live: an old Pro
+        // generation was closed to new keys).
+        assert_eq!(drafting_model(&models).as_deref(), Some("gemini-3.8-flash"));
+        let mut newer_pro = models.clone();
+        newer_pro.push("gemini-3.9-pro".into());
+        assert_eq!(
+            drafting_model(&newer_pro).as_deref(),
+            Some("gemini-3.9-pro")
+        );
+        assert_eq!(drafting_model(&[]), None);
     }
 }

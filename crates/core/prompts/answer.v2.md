@@ -13,4 +13,5 @@ Rules:
 - Scale and number questions: one number in "value", inside the range given.
 - Open questions: one to three sentences in "text", in the person's own voice.
 - "reason": one short sentence, in the first person, on why you answered that way.
-- Answer every question, using the question's code, in the order asked.
+- Reply with one entry per question, keyed by the question's code in brackets (for example
+  "Q3_PRICE"), each holding the one answer field that question asks for plus "reason".

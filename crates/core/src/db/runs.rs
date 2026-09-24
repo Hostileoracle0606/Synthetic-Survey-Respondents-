@@ -165,8 +165,20 @@ pub fn set_status(
     Ok(())
 }
 
-/// On launch: runs left `running` (the app closed or crashed) become `paused`.
+/// On launch, after the app closed or crashed: runs left `running` become `paused`, and
+/// survey drafts or report syntheses left `generating` become `failed`, so their Retry and
+/// Regenerate buttons work again. Returns the number of runs paused.
 pub fn recover_on_launch(conn: &Connection) -> AppResult<usize> {
+    conn.execute(
+        "UPDATE surveys SET draft_status = 'failed', draft_error = 'The app closed while the draft was being written.'
+         WHERE draft_status = 'generating'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE simulation_runs SET synthesis_status = 'failed', synthesis_error = 'The app closed while the summary was being written.'
+         WHERE synthesis_status = 'generating'",
+        [],
+    )?;
     Ok(conn.execute(
         "UPDATE simulation_runs SET status = 'paused', error = 'The app closed during the run. Resume to continue.'
          WHERE status IN ('running','queued')",
@@ -202,6 +214,17 @@ pub fn plan(conn: &Connection, run_id: i64) -> AppResult<RunPlan> {
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
     )?;
     let survey = surveys::get(conn, run.survey_id)?;
+    // Everyone in a run answers the survey that was approved when it started.
+    let approved_hash: String = conn.query_row(
+        "SELECT survey_hash FROM simulation_runs WHERE id = ?1",
+        [run_id],
+        |r| r.get(0),
+    )?;
+    if surveys::survey_hash(&survey) != approved_hash {
+        return Err(AppError::invalid(
+            "the survey changed after this run started, so it can't be resumed; stop it (its answers stay in the report) and run the new survey",
+        ));
+    }
     // A respondent's answers are saved together, so any answer means they are done.
     let ids: Vec<i64> = conn
         .prepare(
