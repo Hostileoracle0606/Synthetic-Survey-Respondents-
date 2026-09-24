@@ -182,7 +182,7 @@ Covers SM3, SM8.
 |---|---|---|
 | `throughput_mock` (nightly) | `ScriptedLlm` with latency drawn from a log-normal (median 8 s, p95 20 s), 100 × 20, concurrency 10, real clock | < 180 s; engine overhead (wall time − ideal time) < 5% |
 | `throughput_live` (release) | Default Gemini Flash model, 100 × 20, concurrency 10 (or lower if the project's tier requires) | < 180 s, recorded with model, tier and date; warn only, since provider speed varies |
-| `memory_1000` (release) | Windows 11 VM (§6), open a project with 1,000 respondents × 20 answers, browse all screens | Rust process ≤ 50 MB; WebView2 renderer process ≤ 100 MB (peak working set, sampled every 500 ms) |
+| `memory_1000` (release) | GitHub `windows-latest`, release `perf` job (`scripts/release/perf-1000.ps1`): a 1,000 × 20 run streams from `mock-gemini` into a performance-harness build, then every screen and every cross-tab is opened. Also on `win11-perf` (§6) once it exists | Rust process ≤ 50 MB; WebView2 renderer process ≤ 100 MB (peak working set, sampled every 500 ms and read from the OS peak) |
 | `db_query_latency` (nightly) | 1,000 × 50 answers | `get_distribution` < 50 ms; `get_crosstab` < 200 ms; `list_responses` page < 50 ms |
 | `export_speed` (nightly) | 1,000 × 50 answers to CSV | < 2 s |
 
@@ -241,7 +241,7 @@ Run the real app with the Rust backend pointed at `MockLlmServer`. Connect Playw
 | Unapproved survey | Edit a question after approval → Run button disabled with "Survey needs review" |
 | Run | Estimate shown → start → progress reaches 100% → pause/resume/cancel buttons work |
 | Results | Charts render; cross-tab by gender; theme coding; export CSV |
-| `stream_fps_1000` | Stream 1,000 respondents from the mock at the maximum batch rate while recording a CDP performance trace: ≥ 95% of frames < 16.7 ms, no long task > 100 ms. Runs on the GPU-backed release VM (§6); on VMs without a GPU it runs warn-only |
+| `stream_fps_1000` | Stream 1,000 respondents from `mock-gemini` while recording every animation frame and long task over CDP: ≥ 95% of frames on time (each within 1.5 vsync intervals of the last, so no vsync missed), no long task > 100 ms. Runs in the release `perf` job on `windows-latest` with the memory test; that runner has no GPU, so it is warn-only there and enforced on `win11-perf` (§6) |
 
 ### S11 — Analytics and exports (Rust + Vitest, PR)
 
@@ -334,6 +334,8 @@ Covers SM9, SM17.
 ## 6. Windows VM environment
 
 Release-tier tests run on Windows VMs, not physical machines. GitHub's `windows-latest` runners run Windows Server, so they cover build and PR tests but not clean installs on a desktop Windows edition.
+
+Memory and frame rate with 1,000 respondents (S7 `memory_1000`, S10 `stream_fps_1000`) already run on `windows-latest`, in the release `perf` job. It builds the app with `--features perf` and `VITE_PERF_HARNESS=1`, so Gemini calls go to a local `mock-gemini` server with no key. `perf-seed` writes the project, and `scripts/release/perf-1000.ps1` measures three runs and compares the median. The `win11-perf` VM adds a GPU and a desktop edition when it exists.
 
 | VM | Image | Size | Used by |
 |---|---|---|---|
