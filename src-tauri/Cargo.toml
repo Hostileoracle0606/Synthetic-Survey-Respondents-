@@ -1,0 +1,22 @@
+[package]
+name = "survey-app"
+version = "0.1.0"
+description = "Tauri desktop shell for the synthetic survey harness. Commands only; logic lives in survey-core."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "survey_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+keyring = { version = "3", features = ["windows-native", "apple-native"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
+survey-core = { version = "0.1.0", path = "../crates/core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["sync"] }

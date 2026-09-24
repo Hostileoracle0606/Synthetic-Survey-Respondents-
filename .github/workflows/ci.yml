@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * *" # nightly live Gemini checks
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Rust core (fmt, clippy, tests, generated types)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy -p survey-core -p survey-evals --all-targets -- -D warnings
+      - run: cargo test -p survey-core -p survey-evals
+      - name: Benchmark pack is valid
+        run: cargo run -q -p survey-evals --bin fidelity -- check benchmarks/fidelity.v1.json
+      - name: Generated TypeScript types are up to date
+        run: git diff --exit-code -- src/types/gen
+
+  web:
+    name: Frontend (typecheck, tests, build)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm exec vite build
+
+  app:
+    name: Windows app (build, size budget)
+    runs-on: windows-latest
+    needs: [core, web]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri icon src-tauri/app-icon.png
+      - run: cargo clippy -p survey-app -- -D warnings
+      - run: pnpm tauri build
+      - name: Installers are under 15 MB
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Recurse target/release/bundle -Include *.msi,*-setup.exe
+          if ($files.Count -eq 0) { throw "no installers found" }
+          foreach ($f in $files) {
+            $mb = [math]::Round($f.Length / 1MB, 2)
+            Write-Host "$($f.Name): $mb MB"
+            if ($f.Length -gt 15MB) { throw "$($f.Name) is $mb MB, over the 15 MB budget" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers
+          path: |
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*-setup.exe
+
+  live:
+    name: Live Gemini checks (nightly or manual)
+    timeout-minutes: 45
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Require the GEMINI_API_KEY secret
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::Add GEMINI_API_KEY under Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+      - run: cargo test -p survey-core --test live_gemini -- --ignored --test-threads=1
+      # TEST_PLAN S13 smoke: a 100-person Canadian cohort answers the benchmark pack.
+      - name: Fidelity benchmark (smoke)
+        run: cargo run -q --release -p survey-evals --bin fidelity -- run --cohort-size 100 --out fidelity-report.json
+      # TEST_PLAN S12: prompt-behaviour evals with a Gemini judge.
+      - name: Prompt evals
+        run: cargo run -q --release -p survey-evals --bin prompt-evals -- --out evals-results.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-reports
+          path: |
+            fidelity-report.json
+            evals-results.jsonl

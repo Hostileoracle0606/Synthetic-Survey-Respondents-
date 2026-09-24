@@ -1,0 +1,359 @@
+{
+  "format": "fidelity-pack/1",
+  "version": "fidelity.v1",
+  "status": "draft",
+  "ground_truth": "planted",
+  "category": "mobile_phone",
+  "reviewed_by": null,
+  "frozen_at": null,
+  "notes": "Starter pack. Rules are drafts written to show the format; a person must review every rule (or replace the pack with reviewed Gemini candidates from `fidelity candidates`), then set status \"frozen\", reviewed_by and frozen_at. Release runs refuse draft packs.",
+  "questions": [
+    {
+      "code": "F01_NEXT_PHONE",
+      "question": {
+        "text": "If you needed a new phone next month, which would you most likely buy?",
+        "questionType": "single_choice",
+        "options": [
+          {
+            "code": "A",
+            "label": "The latest flagship model"
+          },
+          {
+            "code": "B",
+            "label": "A mid-range model from a well-known brand"
+          },
+          {
+            "code": "C",
+            "label": "The cheapest model that does the basics"
+          },
+          {
+            "code": "D",
+            "label": "A refurbished or second-hand phone"
+          }
+        ],
+        "randomize": true,
+        "maxChoices": null,
+        "scale": null,
+        "numeric": null
+      },
+      "source": "human",
+      "attribute": "price_sensitivity",
+      "rule": {
+        "cases": [
+          {
+            "when": {
+              "attribute": "price_sensitivity",
+              "min": 4
+            },
+            "expect": {
+              "A": 0.0,
+              "B": 0.15,
+              "C": 0.5,
+              "D": 0.35
+            }
+          },
+          {
+            "when": {
+              "attribute": "price_sensitivity",
+              "max": 2
+            },
+            "expect": {
+              "A": 0.45,
+              "B": 0.45,
+              "C": 0.05,
+              "D": 0.05
+            }
+          }
+        ],
+        "otherwise": {
+          "A": 0.15,
+          "B": 0.5,
+          "C": 0.2,
+          "D": 0.15
+        }
+      },
+      "rule_author": "DRAFT by Claude, to be replaced or confirmed by a person (decision D1)"
+    },
+    {
+      "code": "F02_NEW_FEATURE",
+      "question": {
+        "text": "How interested are you in trying a phone with a brand-new kind of feature before most people have one?",
+        "questionType": "likert",
+        "options": [],
+        "randomize": false,
+        "maxChoices": null,
+        "scale": {
+          "min": 1,
+          "max": 5,
+          "minLabel": "Not at all interested",
+          "maxLabel": "Very interested"
+        },
+        "numeric": null
+      },
+      "source": "human",
+      "attribute": "biases",
+      "rule": {
+        "cases": [
+          {
+            "when": {
+              "attribute": "biases",
+              "contains": "early adopter"
+            },
+            "expect": {
+              "3": 0.1,
+              "4": 0.4,
+              "5": 0.5
+            }
+          }
+        ],
+        "otherwise": {
+          "1": 0.2,
+          "2": 0.3,
+          "3": 0.3,
+          "4": 0.15,
+          "5": 0.05
+        }
+      },
+      "rule_author": "DRAFT by Claude, to be replaced or confirmed by a person (decision D1)"
+    },
+    {
+      "code": "F03_MAX_SPEND",
+      "question": {
+        "text": "What is the most you would spend on your next phone?",
+        "questionType": "numeric",
+        "options": [],
+        "randomize": false,
+        "maxChoices": null,
+        "scale": null,
+        "numeric": {
+          "min": 0,
+          "max": 2500,
+          "unit": "CAD"
+        }
+      },
+      "source": "human",
+      "attribute": "income",
+      "rule": {
+        "cases": [
+          {
+            "when": {
+              "attribute": "income",
+              "eq": "Over $100k"
+            },
+            "expect": {
+              "0": 0.05,
+              "1": 0.2,
+              "2": 0.35,
+              "3": 0.4
+            }
+          },
+          {
+            "when": {
+              "attribute": "income",
+              "eq": "Under $50k"
+            },
+            "expect": {
+              "0": 0.45,
+              "1": 0.4,
+              "2": 0.1,
+              "3": 0.05
+            }
+          }
+        ],
+        "otherwise": {
+          "0": 0.2,
+          "1": 0.4,
+          "2": 0.25,
+          "3": 0.15
+        },
+        "bins": [
+          [
+            0,
+            400
+          ],
+          [
+            400,
+            800
+          ],
+          [
+            800,
+            1200
+          ],
+          [
+            1200,
+            2500
+          ]
+        ]
+      },
+      "rule_author": "DRAFT by Claude, to be replaced or confirmed by a person (decision D1)"
+    },
+    {
+      "code": "F04_SAME_BRAND",
+      "question": {
+        "text": "When a phone brand you have used for years releases a new model, what do you usually do?",
+        "questionType": "single_choice",
+        "options": [
+          {
+            "code": "A",
+            "label": "Upgrade to it if I can"
+          },
+          {
+            "code": "B",
+            "label": "Look at it alongside other brands"
+          },
+          {
+            "code": "C",
+            "label": "Ignore it until my phone needs replacing"
+          }
+        ],
+        "randomize": true,
+        "maxChoices": null,
+        "scale": null,
+        "numeric": null
+      },
+      "source": "human",
+      "attribute": "biases",
+      "rule": {
+        "cases": [
+          {
+            "when": {
+              "attribute": "biases",
+              "contains": "brand-loyal"
+            },
+            "expect": {
+              "A": 0.6,
+              "B": 0.2,
+              "C": 0.2
+            }
+          }
+        ],
+        "otherwise": {
+          "A": 0.15,
+          "B": 0.45,
+          "C": 0.4
+        }
+      },
+      "rule_author": "DRAFT by Claude, to be replaced or confirmed by a person (decision D1)"
+    },
+    {
+      "code": "F05_SETUP",
+      "question": {
+        "text": "How comfortable are you setting up a new phone on your own?",
+        "questionType": "likert",
+        "options": [],
+        "randomize": false,
+        "maxChoices": null,
+        "scale": {
+          "min": 1,
+          "max": 5,
+          "minLabel": "Not at all comfortable",
+          "maxLabel": "Very comfortable"
+        },
+        "numeric": null
+      },
+      "source": "human",
+      "attribute": "age",
+      "rule": {
+        "cases": [
+          {
+            "when": {
+              "attribute": "age",
+              "max": 29
+            },
+            "expect": {
+              "3": 0.1,
+              "4": 0.35,
+              "5": 0.55
+            }
+          },
+          {
+            "when": {
+              "attribute": "age",
+              "min": 70
+            },
+            "expect": {
+              "1": 0.2,
+              "2": 0.3,
+              "3": 0.3,
+              "4": 0.15,
+              "5": 0.05
+            }
+          }
+        ],
+        "otherwise": {
+          "2": 0.1,
+          "3": 0.25,
+          "4": 0.4,
+          "5": 0.25
+        }
+      },
+      "rule_author": "DRAFT by Claude, to be replaced or confirmed by a person (decision D1)"
+    },
+    {
+      "code": "F06_PAYMENT",
+      "question": {
+        "text": "How do you usually pay for a new phone?",
+        "questionType": "single_choice",
+        "options": [
+          {
+            "code": "A",
+            "label": "Outright, in full"
+          },
+          {
+            "code": "B",
+            "label": "Monthly through my carrier"
+          },
+          {
+            "code": "C",
+            "label": "Monthly financing from the store or brand"
+          },
+          {
+            "code": "D",
+            "label": "Someone else pays for it"
+          }
+        ],
+        "randomize": true,
+        "maxChoices": null,
+        "scale": null,
+        "numeric": null
+      },
+      "source": "human",
+      "attribute": "income",
+      "rule": {
+        "cases": [
+          {
+            "when": {
+              "attribute": "income",
+              "eq": "Under $50k"
+            },
+            "expect": {
+              "A": 0.2,
+              "B": 0.55,
+              "C": 0.15,
+              "D": 0.1
+            }
+          },
+          {
+            "when": {
+              "attribute": "income",
+              "eq": "Over $100k"
+            },
+            "expect": {
+              "A": 0.55,
+              "B": 0.35,
+              "C": 0.1,
+              "D": 0.0
+            }
+          }
+        ],
+        "otherwise": {
+          "A": 0.35,
+          "B": 0.45,
+          "C": 0.15,
+          "D": 0.05
+        }
+      },
+      "rule_author": "DRAFT by Claude, to be replaced or confirmed by a person (decision D1)"
+    }
+  ]
+}

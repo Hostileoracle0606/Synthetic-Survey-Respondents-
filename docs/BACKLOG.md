@@ -1,0 +1,78 @@
+# Backlog — deferred and unapplied work
+
+As of 2026-09-23. The census population is Canada's (Statistics Canada 2021 Census PUMF), corrected from an earlier US table. Work that was deliberately postponed so M2 could start, plus design changes that were agreed or proposed in discussion but not yet written into the docs. Each item says where it came from and what "done" means. Move an item into a milestone in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) when it is scheduled.
+
+## Deferred from M1 (not needed by M2)
+
+| # | Item | Why it can wait | Done when |
+|---|---|---|---|
+| B1 | Full Settings screen: test and delete the key from the UI, model IDs (Flash / Pro), Gemini usage tier, price table | M2 only needs the key, handled by a minimal first-launch prompt. Models are picked automatically (newest stable Flash); rate limits use conservative defaults; prices are first needed in M3 for cost estimates | Settings screen saves all four; the rate limiter and cost estimate read them; first launch opens it when no key is stored |
+| B2 | Step 1 autosave on blur, and reopening a project at `projects.wizard_step` | Generate Cohort already saves the project before starting the job | Editing a field saves within 1 s; relaunching the app reopens the last project on its furthest step |
+| B3 | Frontend lint (ESLint with React hooks rules) in the web CI job | TypeScript strict mode and tests already run | `pnpm lint` passes and runs in CI |
+
+## Deferred from M2
+
+| # | Item | Why it can wait | Done when |
+|---|---|---|---|
+| B4 | Mark the cohort "out of date" when Step 1 audience fields change after generation (DATA_FLOW §2) | Users can regenerate by hand; no data is lost | Step 2 shows the banner when the saved `CohortConfig` differs from Step 1 |
+| B5 | Census tables for countries other than Canada (the US included) | v1 decision: other countries use quotas-only sampling, flagged in the country list | A table exists per supported country, built by `tools/build-populations` |
+| ~~B6~~ | ~~Finer age draw for the 60+ band~~ | **Done in M2:** Canadian ages are drawn from the census age distribution (`CA_ages.csv`; the PUMF gives 5-year groups, so ages are spread evenly within each group); countries without a census table still draw 60+ from 60–84 | — |
+| B7 | Non-binary respondents | The census records sex as two categories, so skeleton gender is binary | A documented, user-set share that the sampler applies on top of the census table |
+| B8 | Full stepper precondition rules (DATA_FLOW §2), e.g. Step 4 opens only with an approved survey | Steps 3–5 are placeholders until M3/M4; the stepper already blocks steps not yet reached | Each step's precondition is checked in the stepper and by its commands |
+
+## Deferred from M3
+
+| # | Item | Why it can wait | Done when |
+|---|---|---|---|
+| B9 | Critic: a second Gemini call flags leading, double-barrelled or unclear questions on every drafted, added or edited question (M3 item 2) | The reviewer approves every question anyway; the critic is advice | Flags show on each question in Step 3 and are stored with it |
+| B10 | "Suggest more" in the suggestions sidebar (`suggest_more`) | The draft already returns 6 suggestions, and people can write their own | The button adds new suggestions, deduplicated against existing text |
+| B11 | Drag-and-drop reordering in Step 3 | Up/down buttons and Alt+↑/↓ already reorder | Questions can be dragged, with the same `reorder_questions` command |
+| B12 | Cost: estimate before a run (`est_cost_usd`) and live cost in Step 4 | Needs the price table from the Settings screen (B1); the card shows "$—" until then | The estimate shows before Run Survey Simulation and cost updates live |
+| B13 | `insta` snapshot tests for the prompts, and the nightly check that Gemini's implicit cache hits (`cached_tokens` > 0) | Prompts are versioned and covered by unit and live tests | Snapshots fail on any unversioned prompt change; the live job reports cache hits |
+| B14 | SPEC §11 performance check: 60 fps and memory limits with 1,000 respondents streaming | Needs the Windows release VMs (M5) | Measured on the M5 VMs within the limits |
+| ~~B15~~ | ~~SPEC §11 check that no API key appears in the database, logs or exports~~ **Done in M4** (`no_api_key_in_the_database_logs_or_exports`) | Exports arrive in M4; the key only ever lives in the OS keychain | A test searches all three after a run with a known fake key |
+| B16 | Edit the survey title and the intro shown to respondents in Step 3 | The draft writes a neutral intro | Both are editable in Step 3 and saved |
+
+## Deferred from M4
+
+| # | Item | Why it can wait | Done when |
+|---|---|---|---|
+| B17 | Edit themes: rename, merge, split or delete a theme and move answers between them (M4 item 3) | Gemini's coding is shown with example quotes, and Regenerate can code again | Edits are saved, counts update, and the synthesis uses the edited themes |
+| B18 | Comparison runs: two runs of the same survey side by side, e.g. a new cohort or seed (SPEC §11, M4 row) | One run per report covers the v1 flow | Step 5 can pick a second run and shows both results for each question |
+| B19 | Open an exported CSV in real Excel on Windows, including non-ASCII text (é, –, CAD) | Unit tests cover the format; Excel only exists on the Windows VMs | Checked on the M5 VMs; any fix is covered by a test |
+| B20 | Live Gemini tests for theme coding and synthesis, in the nightly `live` job | The prompts are covered by `ScriptedLlm` tests; drafting and answering already have live tests | Both run nightly and pass the same checks the app applies |
+| B21 | Show the claims the synthesis checks removed (they're in the JSON export today) | The panel says how many were removed | A "Show removed claims" toggle lists them with the reason |
+
+## Deferred from M5
+
+| # | Item | Why it can wait | Done when |
+|---|---|---|---|
+| B22 | Freeze the fidelity pack: a person reviews every rule in `benchmarks/fidelity.v1.json` (the six starter rules are drafts written to show the format), or replaces it with reviewed candidates from `fidelity candidates` | Needs a person, by decision D1; nightly runs accept the draft and label it | `status: "frozen"`, `reviewed_by`, `frozen_at` set; `fidelity check --release` passes |
+| B23 | Log-probability mode: per-option probabilities for choice questions where the Gemini model returns them (SPEC §8, M5 item 2) | Off by default and hidden when unsupported; needs single-question calls and a probe per model | `option_probs_json` filled, charted next to sampled counts |
+| B24 | Code-signing certificate and the `WINDOWS_CERTIFICATE` secrets | Open decision (unsigned internal use is the fallback); the release workflow signs as soon as the secrets exist | Signed installers pass `signtool verify /pa` in the release run |
+| B25 | Updater (optional, off by default; M5 item 4) | Releases are installed by hand | Tauri updater behind a setting, off by default, with signed update manifests |
+| B26 | Provision the Windows VMs (`win11-clean`, `win11-perf`, and `win10-clean` while Windows 10 is a target), register them as runners and set `RELEASE_VMS=true` | Needs cloud access and budget (open decision); installs are smoke-tested on `windows-latest` meanwhile | The VM jobs in `release.yml` run on every tag |
+| B27 | Remaining S13 rows: run-to-run stability (3 seeds) and model comparison (default Flash vs another Gemini model) | The fidelity score, attribute sensitivity, variance, midpoint, order effect and subgroup checks are built | `fidelity run` takes several seeds and models and reports both |
+| B28 | Remaining S14/S8 release tests: `upgrade_keeps_data`, `clean_install_win10_no_webview2`, `network_egress` | Need the VMs (B26) | Automated in the VM jobs |
+| B29 | S12 baselines and human checks: record the first pass rates as baselines, have a person check 20% of judgements each release, and grow the case files toward the sizes in TEST_PLAN S12 (critic and theme-coder evals need the critic, B9, and human-coded themes) | The harness, 14 cases and zero-tolerance injection check exist | Baselines stored in `evals/results.jsonl`; thresholds enforced against them |
+
+## Design changes agreed or proposed but not yet in the docs
+
+| # | Change | Status | Where it goes |
+|---|---|---|---|
+| ~~D1~~ | Fidelity benchmark: Gemini writes questions only (no expected answers, no rules); a person writes the attribute rules during review | **Applied in M5** (SPEC §8, TEST_PLAN S13, `survey-evals`) | SPEC §8, IMPLEMENTATION_PLAN M5 item 1, TEST_PLAN S13 |
+| D2 | Census realism check: personas answer held-out factual questions (home ownership, dwelling type, commute mode, language spoken at home…) and are scored against real 2021 Census PUMF answers for their demographic cells; variables used to build personas are excluded | Proposed, awaiting approval | SPEC §8, TEST_PLAN S13, `tools/build-populations` (the same microdata already feeds the US table) |
+| ~~D3~~ | Label-free validity checks (variance, midpoint rate, order effects, run-to-run stability) run on every question, including ones without rules | **Applied in M5** except run-to-run stability (B27) | TEST_PLAN S13 |
+| D4 | The shared spec doc on claude.ai is behind the repo's `docs/SPEC.md` | Not synced since the Gemini-only decision | Re-sync or retire the shared doc in favour of the repo |
+
+## Open decisions (need an answer before the stage that uses them)
+
+| Decision | Needed by | Current assumption |
+|---|---|---|
+| Gemini usage tier (sets RPM, TPM, RPD defaults) | M2 live runs at scale | Conservative defaults: 60 requests/min, 1M input tokens/min, 1,000 requests/day, concurrency 4 |
+| Survey length presets per research type | M3 | 8–10 core questions + 6 suggestions |
+| Keep Windows 10 as a supported target | M5 | Yes, while Microsoft extended support lasts |
+| Stop & Save final or resumable | M3 | Final |
+| Synthesis automatic or on demand | M4 | Automatic on completion |
+| Cloud and budget for Windows 11 release VMs | M5 | Azure, started only for release runs |
+| Rotate the Gemini key shared in chat; add it as the `GEMINI_API_KEY` repository secret | Now: the M2 live exit check (`live_cohort_200_matches_quotas`) runs only in the `live` CI job | Not confirmed |

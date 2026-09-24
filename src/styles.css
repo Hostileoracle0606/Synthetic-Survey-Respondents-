@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* Tokens match the UI prototype (wizard page on the design canvas). */
+@theme {
+  --color-page: #e9e9e5;
+  --color-card: #f8f8f6;
+  --color-ink: #1c1c1a;
+  --color-muted: #55554f;
+  --color-line: #8e8e88;
+  --color-divider: #dcdcd6;
+  --color-olive: #3e4638;
+  --color-accent: #1e3fd8;
+  --color-accent-dark: #142c9e;
+  --color-ok: #1f5e38;
+  --color-ok-bg: #e3f1e8;
+  --color-bad: #8c2a22;
+  --font-display: "Poppins", system-ui, sans-serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+body {
+  margin: 0;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}

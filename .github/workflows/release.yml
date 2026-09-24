@@ -1,0 +1,127 @@
+name: Release
+
+# Tag vX.Y.Z to build, sign (when a certificate is configured), smoke-test and publish a
+# draft release. TEST_PLAN S14 (packaging and install) and §6 (Windows VMs).
+
+on:
+  push:
+    tags: ["v*"]
+    branches: ["**"]
+    # Branch pushes run only when the pipeline itself changes (paths are not checked for tags),
+    # to exercise it without publishing.
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/release/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and sign installers
+    runs-on: windows-latest
+    env:
+      CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE }}
+      CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri icon src-tauri/app-icon.png
+      - run: pnpm tauri build
+      # Authenticode: runs only when the WINDOWS_CERTIFICATE secret (base64 .pfx) is set.
+      # Without it the installers ship unsigned, and the summary says so (open decision).
+      - name: Sign installers
+        if: env.CERT_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT_PFX_BASE64))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
+          $files = Get-ChildItem -Recurse target/release/bundle -Include *.msi,*-setup.exe
+          foreach ($f in $files) {
+            & $signtool.FullName sign /f $pfx /p $env:CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $f.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signing $($f.Name) failed" }
+            & $signtool.FullName verify /pa $f.FullName   # TEST_PLAN S14 signature_valid
+            if ($LASTEXITCODE -ne 0) { throw "signature on $($f.Name) does not verify" }
+          }
+          Remove-Item $pfx
+      - name: Unsigned build notice
+        if: env.CERT_PFX_BASE64 == ''
+        shell: pwsh
+        run: echo "::warning::No WINDOWS_CERTIFICATE secret; installers are unsigned (SmartScreen will warn users)."
+      - name: Installers are under 15 MB
+        shell: pwsh
+        run: |
+          foreach ($f in Get-ChildItem -Recurse target/release/bundle -Include *.msi,*-setup.exe) {
+            $mb = [math]::Round($f.Length / 1MB, 2); Write-Host "$($f.Name): $mb MB"
+            if ($f.Length -gt 15MB) { throw "$($f.Name) is $mb MB, over the 15 MB budget" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers
+          path: |
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*-setup.exe
+
+  install-smoke:
+    name: Install, launch, uninstall (${{ matrix.kind }})
+    needs: build
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [nsis, msi]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: installers
+          path: installers
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $pattern = if ('${{ matrix.kind }}' -eq 'msi') { '*.msi' } else { '*-setup.exe' }
+          $installer = Get-ChildItem -Recurse installers -Filter $pattern | Select-Object -First 1
+          ./scripts/release/install-smoke.ps1 -Installer $installer.FullName
+
+  # Windows 11 VMs from TEST_PLAN §6, registered as self-hosted runners. Set the repository
+  # variable RELEASE_VMS to "true" once they exist; until then these jobs are skipped.
+  win11-clean:
+    name: Clean install on Windows 11 VM
+    needs: build
+    if: vars.RELEASE_VMS == 'true'
+    runs-on: [self-hosted, win11-clean]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: installers
+          path: installers
+      - shell: pwsh
+        run: |
+          foreach ($i in Get-ChildItem -Recurse installers -Include *.msi,*-setup.exe) {
+            ./scripts/release/install-smoke.ps1 -Installer $i.FullName
+          }
+
+  publish:
+    name: Draft GitHub release
+    needs: [build, install-smoke]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: installers
+          path: installers
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: installers/**/*
