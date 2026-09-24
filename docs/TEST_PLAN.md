@@ -172,7 +172,7 @@ Covers SM2, SM12.
 | `option_order_reproducible` | Two runs with the same seed store identical `shown_options_json` per respondent |
 | `run_snapshot_complete` | `simulation_runs` stores provider, model, temperature, answer mode, prompt version, seed and survey hash |
 | `survey_edit_changes_hash` | Editing any active question changes `survey_hash`; toggling an inactive one does not |
-| `prompt_snapshot` (`insta`) | Rendered prompts for fixed persona + survey match reviewed snapshots; any prompt change shows as a diff in review |
+| `prompt_snapshot` (`insta`) | Rendered prompts for fixed persona + survey match reviewed snapshots, stored under the prompt version (`crates/core/tests/snapshots/`); changing a prompt without bumping its version fails, and a bumped one shows as a new snapshot in review |
 
 ### S7 — Performance and resources (nightly and release)
 

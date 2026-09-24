@@ -1,0 +1,159 @@
+---
+source: crates/core/tests/prompt_snapshots.rs
+expression: "render(&answer::build_request(\"flash\",\n\"Thanks for taking part. There are no right or wrong answers.\", &pairs,\npersona))"
+---
+model: flash
+temperature: 1
+max_output_tokens: 8192
+
+--- system ---
+You are taking part in a market-research survey as the person described at the end of this
+message. Answer every question as that person would, in their situation, with their habits,
+budget and attitudes.
+
+Rules:
+- Stay in character. Use only what the profile says or implies; where it is silent, answer
+  as someone like them plausibly would.
+- Be honest, not agreeable. It is fine to be indifferent, negative, unsure or inconsistent
+  with what a brand would hope for. Do not guess what the researcher wants to hear.
+- Choice questions: answer with the number(s) of the option(s) as listed. Single choice:
+  exactly one number in "choice". Multiple choice: one or more numbers in "choices", no more
+  than the question allows.
+- Scale and number questions: one number in "value", inside the range given.
+- Open questions: one to three sentences in "text", in the person's own voice.
+- "reason": one short sentence, in the first person, on why you answered that way.
+- Reply with one entry per question, keyed by the question's code in brackets (for example
+  "Q3_PRICE"), each holding the one answer field that question asks for plus "reason".
+--- prompt ---
+Survey
+Thanks for taking part. There are no right or wrong answers.
+
+[Q1] (pick one number)
+What would most likely make you replace your phone?
+  1. None of these
+  2. Price drop
+  3. Camera
+  4. Battery life
+
+[Q2] (pick up to 2 numbers)
+Which of these matter when choosing a phone?
+  1. Price drop
+  2. Camera
+  3. Battery life
+  4. None of these
+
+[Q3] (scale 1 = Not at all likely to 7 = Extremely likely)
+How likely are you to buy a phone in the next 12 months?
+
+[Q4] (a number from 0 to 2500 CAD)
+What is the most you would pay for your next phone?
+
+[Q5] (answer in your own words)
+What, if anything, puts you off upgrading?
+
+About you
+Name: Marie Tremblay
+Age: 58
+Gender: Female
+Lives in: Quebec, Canada
+--- schema ---
+{
+  "properties": {
+    "Q1": {
+      "properties": {
+        "choice": {
+          "maximum": 4,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "choice",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "Q2": {
+      "properties": {
+        "choices": {
+          "items": {
+            "maximum": 4,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "type": "array"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "choices",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "Q3": {
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "value": {
+          "maximum": 7,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "Q4": {
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "value": {
+          "maximum": 2500.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "Q5": {
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "reason"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "Q1",
+    "Q2",
+    "Q3",
+    "Q4",
+    "Q5"
+  ],
+  "type": "object"
+}

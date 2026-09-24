@@ -413,3 +413,153 @@ async fn live_critic() {
         flags, resp.latency_ms, resp.usage
     );
 }
+
+/// SPEC §5 prompt caching (B13): answer calls for one survey share a long prefix (rules, then
+/// the survey), so Gemini's implicit cache should serve part of the input from the second
+/// call on. The survey is made long enough to pass the model's minimum cacheable prefix
+/// (4,096 tokens for Gemini 3.x Flash). Cache hits are best effort, so up to five calls are
+/// made; the cached-token counts go to the job summary either way.
+#[tokio::test]
+#[ignore = "calls the live Gemini API (up to 5 requests)"]
+async fn live_implicit_cache_hits() {
+    use std::io::Write;
+    use survey_core::engine::answer::build_request;
+    use survey_core::model::{
+        ChoiceOption, Question, QuestionBody, QuestionOrigin, QuestionType, ReviewStatus,
+    };
+    let c = client();
+    let model = pick_model(&c).await;
+    let topics = [
+        "battery life",
+        "camera quality",
+        "screen size",
+        "storage",
+        "price",
+        "brand reputation",
+        "trade-in value",
+        "carrier deals",
+        "durability",
+        "software updates",
+        "privacy",
+        "charging speed",
+        "weight",
+        "design",
+        "repairability",
+        "resale value",
+        "5G coverage",
+        "accessories",
+        "warranty",
+        "store experience",
+        "online reviews",
+        "friends' advice",
+        "environmental impact",
+        "financing options",
+        "security features",
+        "audio quality",
+        "gaming performance",
+        "water resistance",
+        "wireless charging",
+        "headphone jack",
+        "biometric unlock",
+        "display brightness",
+        "refresh rate",
+        "satellite messaging",
+        "dual SIM support",
+        "AI features",
+        "stylus support",
+        "foldable design",
+        "customer service",
+        "availability in stores",
+    ];
+    let qs: Vec<Question> = topics
+        .iter()
+        .enumerate()
+        .map(|(i, t)| Question {
+            id: i as i64 + 1,
+            code: format!("Q{}", i + 1),
+            order_index: i as u32 + 1,
+            body: QuestionBody {
+                text: format!(
+                    "Thinking about the next time you choose a smartphone, how much would {t} influence which model you buy, compared with everything else you consider?"
+                ),
+                question_type: QuestionType::SingleChoice,
+                options: [
+                    "It would be the single most important factor in my decision",
+                    "It would be one of the two or three most important factors",
+                    "It would matter somewhat, but other things would matter more",
+                    "It would matter only if everything else were equal",
+                    "It would not matter to me at all",
+                    "I don't know or haven't thought about it",
+                ]
+                .iter()
+                .enumerate()
+                .map(|(j, l)| ChoiceOption {
+                    code: ((b'A' + j as u8) as char).to_string(),
+                    label: l.to_string(),
+                })
+                .collect(),
+                // Same option order for everyone, so the whole survey is a shared prefix.
+                randomize: false,
+                max_choices: None,
+                scale: None,
+                numeric: None,
+            },
+            is_active: true,
+            origin: QuestionOrigin::Ai,
+            review_status: ReviewStatus::Accepted,
+            objective: None,
+            rationale: None,
+            critique: None,
+        })
+        .collect();
+    let pairs: Vec<_> = qs
+        .iter()
+        .map(|q| (q, q.body.options.iter().map(|o| o.code.clone()).collect()))
+        .collect();
+    let people = [
+        "Name: Marie Tremblay\nAge: 58\nGender: Female\nLives in: Quebec, Canada\n",
+        "Name: Daniel Okafor\nAge: 27\nGender: Male\nLives in: Ontario, Canada\n",
+        "Name: Priya Nair\nAge: 41\nGender: Female\nLives in: British Columbia, Canada\n",
+        "Name: Tom Brennan\nAge: 66\nGender: Male\nLives in: Atlantic, Canada\n",
+        "Name: Sofia Reyes\nAge: 33\nGender: Female\nLives in: Prairies, Canada\n",
+    ];
+    let mut report = Vec::new();
+    let mut hit = false;
+    for (i, persona) in people.iter().enumerate() {
+        let req = build_request(&model, "Thanks for taking part.", &pairs, persona);
+        let resp = c
+            .complete_structured(&req)
+            .await
+            .expect("answer call succeeds");
+        report.push(format!(
+            "call {}: {} input tokens, {} cached",
+            i + 1,
+            resp.usage.input_tokens,
+            resp.usage.cached_tokens
+        ));
+        if i > 0 && resp.usage.cached_tokens > 0 {
+            hit = true;
+            break;
+        }
+    }
+    let summary = format!(
+        "### Gemini implicit cache ({model})\n\n{}\n\nCache hit: {}\n",
+        report
+            .iter()
+            .map(|l| format!("- {l}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        if hit { "yes" } else { "no" }
+    );
+    eprintln!("{summary}");
+    if let Ok(path) = std::env::var("GITHUB_STEP_SUMMARY") {
+        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(path) {
+            let _ = writeln!(f, "{summary}");
+        }
+    }
+    assert!(
+        hit,
+        "no cached tokens in {} calls: {report:?}",
+        report.len()
+    );
+}
