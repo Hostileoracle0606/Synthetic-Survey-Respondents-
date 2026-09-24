@@ -87,7 +87,7 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 - Same seed → same demographics: covered by the sampler tests.
 - Engine tests on `ScriptedLlm`: 8 cohort-job tests pass, 69 core tests in total.
-- 200 live personas with exact quotas: the test `live_cohort_200_matches_quotas` is written, but it has not run yet. It runs in the nightly/manual `live` CI job once the `GEMINI_API_KEY` repository secret is added. A live batch of 4 personas passed earlier, on the earlier US table; the Canadian cohort has not been run live yet.
+- 200 live personas with exact quotas: **passed live on 2026-09-24**. `live_cohort_200_matches_quotas` ran on gemini-3.8-flash with the Canadian table. All 200 were kept, matching every quota row; it took 123 s, 40 calls, and 15 people were replaced at screening.
 
 ## M3 — Questionnaire and Simulation: Steps 3 and 4 (about 2.5 weeks; the core, so review it hardest)
 
@@ -167,6 +167,41 @@ Exit criteria:
 4. Authenticode signing; optional updater, off by default.
 5. Windows 11 VM release pipeline with clean snapshots (test plan §6).
 6. Hardening: API key canary search across database, logs and exports; log redaction; memory check with 1,000 respondents (Rust ≤ 50 MB, WebView2 renderer ≤ 100 MB).
+
+**Status (2026-09-24):**
+- **Built:**
+  - label-free validity checks on every question (D3);
+  - the fidelity benchmark: pack format, scorer, runner, and the `fidelity` tool (D1);
+  - the S12 `prompt-evals` harness with 14 cases;
+  - the release workflow, with signing ready for a certificate;
+  - the Rust memory test.
+- **Not built:** log-probability mode (B23) and the updater (B25).
+- **Log redaction:** nothing is needed. The app writes no log files, the key lives only in the OS keychain, and `GeminiClient`'s Debug output redacts it.
+
+Live results, all with gemini-3.8-flash; drafting also picks Flash, because the only stable Pro (2.5) is an older generation and closed to new keys:
+- **Fidelity smoke, end to end:**
+  - a live 100-person Canadian cohort answered the draft pack: 0 invalid answers, 0 failures;
+  - fidelity 72.9;
+  - attribute sensitivity 60% of questions, against an 80% target. The pack's draft rules need review before freezing (B22); F02's rule matches a bias label Gemini's personas don't use.
+- **Prompt evals:**
+
+  | Eval | Pass rate |
+  |---|---|
+  | In-character | 4/4 |
+  | Injection | 3/3 (zero-tolerance) |
+  | No stereotyping | 2/2 |
+  | Uncertainty | 1/2 |
+  | Drafting | 2/3 (one double-barrelled suggestion; see the critic, B9) |
+
+- **Merge blockers found and fixed by these runs:**
+  - the answer schema allowed free text for choice questions;
+  - the drafting model picked a closed Pro generation;
+  - the judge's token limit was too low for thinking tokens.
+- **Release smoke on `windows-latest`:**
+  - NSIS and MSI each install, launch and uninstall cleanly;
+  - idle working set: app 30.8 MB, WebView2 renderer 79.9 MB.
+- **Memory (Rust side, 1,000 × 20):** peak 27.8 MB.
+- **Waiting on B22 and B24–B28:** a frozen pack, a certificate and the VMs.
 
 ## Parallelisation and agents
 
