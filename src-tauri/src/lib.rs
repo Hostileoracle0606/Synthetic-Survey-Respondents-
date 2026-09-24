@@ -3,6 +3,8 @@
 
 mod commands;
 mod keychain;
+#[cfg(feature = "perf")]
+mod perf;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -49,6 +51,8 @@ pub fn run() {
             // The saved Gemini usage tier (BACKLOG B1, Free by default); a tier change in
             // Settings takes effect the next time the app launches.
             let limits = Limits::for_tier(survey_core::db::settings::get(&conn)?.usage_tier);
+            #[cfg(feature = "perf")]
+            let limits = perf::limits(limits);
             app.manage(AppState {
                 db: Mutex::new(conn),
                 db_path: path,

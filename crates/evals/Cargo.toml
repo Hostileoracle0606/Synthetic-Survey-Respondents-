@@ -1,7 +1,7 @@
 [package]
 name = "survey-evals"
 version = "0.1.0"
-description = "Offline tools, never shipped: the fidelity benchmark (TEST_PLAN S13) and prompt-behaviour evals with a Gemini judge (S12)."
+description = "Offline tools, never shipped: the fidelity benchmark (TEST_PLAN S13), prompt-behaviour evals with a Gemini judge (S12), and the mock Gemini server and seed for the release performance run (S7, S10)."
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
@@ -11,6 +11,6 @@ publish = false
 survey-core = { path = "../core" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "time"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
 rusqlite = { version = "0.39", features = ["bundled"] }
 tempfile = "3.27.0"

@@ -10,6 +10,10 @@ rust-version.workspace = true
 name = "survey_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# Performance-harness builds only (src/perf.rs; TEST_PLAN S7, S10). Never in a release installer.
+perf = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
