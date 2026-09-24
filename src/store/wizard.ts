@@ -31,7 +31,7 @@ export const useWizard = create<WizardState>((set) => ({
   reached: 0,
   projectId: null,
   info: { title: "", researchType: null, productCategory: "mobile_phone", countries: [], researchGoal: "" },
-  cohort: { size: 200, seed: 4821, quotas: [], screening: "" },
+  cohort: { size: 200, seed: 4821, quotas: [], screening: "", nonBinaryShare: 0, countries: [] },
   currentCohort: null,
   progress: null,
   goTo: (s) => set((st) => (s <= st.reached ? { step: s } : st)),

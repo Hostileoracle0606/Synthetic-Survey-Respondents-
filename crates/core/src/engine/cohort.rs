@@ -370,6 +370,8 @@ mod tests {
                 },
             ],
             screening: "Owns a smartphone.".into(),
+            non_binary_share: 0,
+            countries: vec!["CA".into()],
         }
     }
 

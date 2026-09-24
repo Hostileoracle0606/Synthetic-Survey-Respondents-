@@ -132,7 +132,7 @@ pub async fn regenerate_cohort(
 async fn start_cohort(
     state: &State<'_, AppState>,
     project_id: i64,
-    config: CohortConfig,
+    mut config: CohortConfig,
     parent: Option<i64>,
     on_progress: Channel<CohortProgress>,
 ) -> AppResult<Cohort> {
@@ -142,6 +142,9 @@ async fn start_cohort(
     }
     // Validates quotas and countries before anything is saved.
     sampling::Sampler::new(&config, &project.countries)?;
+    // Snapshot the countries this cohort was generated for, so Step 2 can tell if Step 1's
+    // audience has since drifted (BACKLOG B4).
+    config.countries = project.countries.clone();
     let client = gemini()?;
     let model = flash_model(state, &client).await?;
     let cohort = cohorts::create(

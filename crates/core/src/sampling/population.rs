@@ -46,6 +46,8 @@ pub const AGE_BANDS: [(&str, u32, u32); 4] = [
     ("60+", 60, 84),
 ];
 pub const GENDERS: [&str; 2] = ["Female", "Male"];
+/// Label used for the user-set non-binary share applied on top of the census draw (BACKLOG B7).
+pub const NON_BINARY_LABEL: &str = "Non-binary";
 pub const INCOMES: [&str; 3] = ["Under $50k", "$50k–$100k", "Over $100k"];
 
 fn parse_cells(country: &str, csv: &str) -> Vec<Cell> {

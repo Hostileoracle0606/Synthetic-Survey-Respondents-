@@ -103,6 +103,15 @@ pub struct CohortConfig {
     pub seed: u64,
     pub quotas: Vec<QuotaGroup>,
     pub screening: String,
+    /// Percentage (0-100) of respondents drawn as non-binary, applied on top of the census
+    /// or synthetic gender draw (BACKLOG B7). 0 keeps the binary census/quota draw as is.
+    /// Mutually exclusive with a "gender" quota group.
+    #[serde(default)]
+    pub non_binary_share: u8,
+    /// Target Countries at the moment this cohort was generated, so Step 2 can tell the user
+    /// their Step 1 audience has drifted (BACKLOG B4). Not user-editable directly.
+    #[serde(default)]
+    pub countries: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

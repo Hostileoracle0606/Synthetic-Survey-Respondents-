@@ -73,7 +73,7 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 4. `engine::cohort` job: batches of 8, diversity hint, screening with redraw from the same quota cell (failed personas kept as `screen_status = 'failed'`), validate → retry once → split batch, save per batch through the writer, stream `CohortProgress`.
 5. Shared rate limiter (`governor`): requests per minute, input tokens per minute, requests per day, defaults from the Gemini tier.
 6. `generate_cohort` starts the persona job (and, from M3, the draft job) and returns at once. `get_cohort_summary`, `list_respondents` (search in SQL), `get_respondent`, `regenerate_cohort` (new version), `lock_cohort`.
-7. ~~Mark the cohort "out of date"~~ — deferred to BACKLOG B4.
+7. Mark the cohort "out of date" when Step 1's audience drifts from the saved `CohortConfig` (BACKLOG B4, done post-M2).
 
 **UI track**
 
@@ -83,7 +83,7 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 **Exit:** 200 personas generated against the live API match quotas exactly; the same seed reproduces the same demographics; engine tests pass on `ScriptedLlm`.
 
-**Status (2026-09-23):** items 0–6, 8 and 10 are built; item 9 is partly done (the stepper opens a step once it has been reached; the full precondition rules come with M3's steps). Exit criteria:
+**Status (2026-09-23):** items 0–6, 8 and 10 are built; item 9 is partly done (the stepper opens a step once it has been reached; the full precondition rules come with M3's steps). Items 7 (BACKLOG B4), non-binary respondents (BACKLOG B7) and the rest of the precondition rules (BACKLOG B8) landed after M3–M5 shipped; see BACKLOG.md. Exit criteria:
 
 - Same seed → same demographics: covered by the sampler tests.
 - Engine tests on `ScriptedLlm`: 8 cohort-job tests pass, 69 core tests in total.

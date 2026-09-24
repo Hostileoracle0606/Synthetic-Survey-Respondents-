@@ -7,10 +7,12 @@
 //! 4. Draw people one at a time, only from cells whose quota values still have room, with
 //!    probability ∝ raked weight × remaining room. Every group's counts come out exact.
 
+use std::collections::HashSet;
+
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use super::population::{self, Cell, AGE_BANDS, GENDERS};
+use super::population::{self, Cell, AGE_BANDS, GENDERS, NON_BINARY_LABEL};
 use super::{apportion, validate};
 use crate::countries;
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -36,6 +38,9 @@ pub struct Sampler {
     quota_keys: Vec<String>,
     config: CohortConfig,
     ages: Vec<(String, Vec<(u32, f64)>)>,
+    /// Ordinals reassigned to `NON_BINARY_LABEL` (BACKLOG B7), so `redraw` keeps the same
+    /// respondent non-binary if it re-picks them.
+    non_binary: HashSet<u32>,
 }
 
 impl Sampler {
@@ -81,6 +86,12 @@ impl Sampler {
                 )));
             }
         }
+        if config.non_binary_share > 0 && quota_keys.iter().any(|k| k == "gender") {
+            return Err(AppError::invalid(
+                "a gender quota group and a non-binary share can't both be set",
+            ));
+        }
+        let non_binary = non_binary_ordinals(config.size, config.non_binary_share, config.seed)?;
 
         let mut cells = Vec::new();
         let mut ages = Vec::new();
@@ -114,6 +125,7 @@ impl Sampler {
             quota_keys,
             config,
             ages,
+            non_binary,
         })
     }
 
@@ -213,12 +225,17 @@ impl Sampler {
             }
             None => rng.random_range(lo..=hi),
         };
+        let gender = if self.non_binary.contains(&ordinal) {
+            NON_BINARY_LABEL.to_string()
+        } else {
+            c.gender.clone()
+        };
         Skeleton {
             ordinal,
             country: c.country.clone(),
             age,
             age_band: c.age_band.clone(),
-            gender: c.gender.clone(),
+            gender,
             region: c.region.clone(),
             income: c.income.clone(),
             occupation: c.occupation.clone(),
@@ -232,6 +249,23 @@ fn quota_cell(c: &Cell, keys: &[String]) -> String {
         .map(|k| format!("{k}={}", c.value(k).unwrap_or_default()))
         .collect::<Vec<_>>()
         .join("|")
+}
+
+/// Picks exactly `share`% of ordinals `1..=n` (largest-remainder exact) to reassign to
+/// `NON_BINARY_LABEL`. Keyed by ordinal, not draw order, so `redraw` reproduces the same
+/// choice for a respondent it replaces.
+fn non_binary_ordinals(n: u32, share: u8, seed: u64) -> AppResult<HashSet<u32>> {
+    if share == 0 {
+        return Ok(HashSet::new());
+    }
+    let count = apportion(&[u32::from(share), 100 - u32::from(share)], n)?[0] as usize;
+    let mut ordinals: Vec<u32> = (1..=n).collect();
+    let mut rng = ChaCha8Rng::seed_from_u64(seed ^ 0x6e6f6e5f62696e61); // distinct stream from draw/redraw
+    for i in (1..ordinals.len()).rev() {
+        let j = rng.random_range(0..=i);
+        ordinals.swap(i, j);
+    }
+    Ok(ordinals.into_iter().take(count).collect())
 }
 
 /// Weighted choice; None when every weight is zero.
@@ -433,6 +467,8 @@ mod tests {
                 ),
             ],
             screening: String::new(),
+            non_binary_share: 0,
+            countries: vec!["CA".into()],
         }
     }
 
@@ -528,6 +564,8 @@ mod tests {
                 ),
             ],
             screening: String::new(),
+            non_binary_share: 0,
+            countries: vec!["CA".into(), "US".into()],
         };
         let skel = Sampler::new(&cfg, &["CA".into(), "US".into()])
             .unwrap()
@@ -553,6 +591,59 @@ mod tests {
         assert!(Sampler::new(&ca_config(100, 1), &[]).is_err());
         // Two countries without a country quota group.
         assert!(Sampler::new(&ca_config(100, 1), &["CA".into(), "US".into()]).is_err());
+    }
+
+    #[test]
+    fn non_binary_share_is_exact_and_leaves_other_quotas_alone() {
+        let mut cfg = ca_config(1000, 4);
+        cfg.non_binary_share = 7;
+        let skel = Sampler::new(&cfg, &["CA".into()]).unwrap().draw().unwrap();
+        assert_eq!(counts(&skel, |s| &s.gender, NON_BINARY_LABEL), 70);
+        for grp in &cfg.quotas {
+            let want = apportion(
+                &grp.rows.iter().map(|r| r.percent).collect::<Vec<_>>(),
+                1000,
+            )
+            .unwrap();
+            for (r, w) in grp.rows.iter().zip(want) {
+                let got = match grp.key.as_str() {
+                    "age" => counts(&skel, |s| &s.age_band, &r.label),
+                    "region" => counts(&skel, |s| &s.region, &r.label),
+                    _ => counts(&skel, |s| &s.income, &r.label),
+                };
+                assert_eq!(
+                    got, w,
+                    "{} {} unaffected by non_binary_share",
+                    grp.key, r.label
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn redraw_keeps_the_same_respondent_non_binary() {
+        let mut cfg = ca_config(50, 9);
+        cfg.non_binary_share = 20;
+        let s = Sampler::new(&cfg, &["CA".into()]).unwrap();
+        let skel = s.draw().unwrap();
+        let non_binary_idx = skel
+            .iter()
+            .position(|p| p.gender == NON_BINARY_LABEL)
+            .expect("at least one non-binary respondent in 50 at a 20% share");
+        let redrawn = s.redraw(&skel[non_binary_idx], 1).unwrap();
+        assert_eq!(redrawn.gender, NON_BINARY_LABEL);
+    }
+
+    #[test]
+    fn non_binary_share_conflicts_with_a_gender_quota_group() {
+        let mut cfg = ca_config(100, 1);
+        cfg.non_binary_share = 5;
+        cfg.quotas
+            .push(g("gender", &[("Female", 50), ("Male", 50)]));
+        assert_eq!(
+            Sampler::new(&cfg, &["CA".into()]).err().unwrap().code,
+            ErrorCode::InvalidInput
+        );
     }
 
     #[test]

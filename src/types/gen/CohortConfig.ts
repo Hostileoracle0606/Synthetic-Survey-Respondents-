@@ -4,4 +4,15 @@ import type { QuotaGroup } from "./QuotaGroup";
 /**
  * Step 1 audience section.
  */
-export type CohortConfig = { size: number, seed: number, quotas: Array<QuotaGroup>, screening: string, };
+export type CohortConfig = { size: number, seed: number, quotas: Array<QuotaGroup>, screening: string, 
+/**
+ * Percentage (0-100) of respondents drawn as non-binary, applied on top of the census
+ * or synthetic gender draw (BACKLOG B7). 0 keeps the binary census/quota draw as is.
+ * Mutually exclusive with a "gender" quota group.
+ */
+nonBinaryShare: number, 
+/**
+ * Target Countries at the moment this cohort was generated, so Step 2 can tell the user
+ * their Step 1 audience has drifted (BACKLOG B4). Not user-editable directly.
+ */
+countries: Array<string>, };

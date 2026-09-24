@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
+import { cohortIsOutOfDate } from "../../lib/cohortDrift";
 import { useWizard } from "../../store/wizard";
 import type { CohortSummary } from "../../types/gen/CohortSummary";
 import type { RespondentCard } from "../../types/gen/RespondentCard";
@@ -11,7 +12,7 @@ const PAGE = 24;
 
 /** Step 2 (docs/DATA_FLOW.md §3, Step 2). */
 export function PersonasStep() {
-  const { info, currentCohort, progress, setCurrentCohort, setProgress, reach, goTo } = useWizard();
+  const { info, cohort, currentCohort, progress, setCurrentCohort, setProgress, reach, goTo } = useWizard();
   const [summary, setSummary] = useState<CohortSummary | null>(null);
   const [cards, setCards] = useState<RespondentCard[]>([]);
   const [total, setTotal] = useState(0);
@@ -21,6 +22,10 @@ export function PersonasStep() {
   const cohortId = currentCohort?.id ?? null;
   const status = summary?.status ?? currentCohort?.status ?? "generating";
   const generating = status === "generating";
+  const outOfDate =
+    (status === "ready" || status === "locked") &&
+    currentCohort != null &&
+    cohortIsOutOfDate(info.countries, cohort, currentCohort);
 
   const refresh = useCallback(async () => {
     if (cohortId == null) return;
@@ -121,6 +126,12 @@ export function PersonasStep() {
         <div role="alert" className="flex items-center justify-between gap-4 rounded-full border border-[#f0c6be] bg-[#fbe9e6] px-6 py-3 text-bad">
           <span>{error}</span>
           <button type="button" className={pillButton} onClick={regenerate}>Try again</button>
+        </div>
+      )}
+      {!error && outOfDate && (
+        <div role="alert" className="flex items-center justify-between gap-4 rounded-full border border-[#e9d7ab] bg-[#fbf0dc] px-6 py-3 text-[#7a4a06]">
+          <span>Cohort out of date — Step 1&rsquo;s audience has changed since this cohort was generated.</span>
+          <button type="button" className={pillButton} onClick={regenerate}>Regenerate Cohort</button>
         </div>
       )}
       <div className="grid grid-cols-5 gap-3.5">

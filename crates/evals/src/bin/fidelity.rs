@@ -212,6 +212,8 @@ async fn make_cohort(
         seed,
         quotas: survey_core::sampling::census_default_quotas("CA").ok_or("no Canada table")?,
         screening: String::new(),
+        non_binary_share: 0,
+        countries: vec!["CA".into()],
     };
     let cohort = cohorts::create(
         &conn,
