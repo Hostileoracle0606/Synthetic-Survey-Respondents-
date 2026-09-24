@@ -18,8 +18,8 @@ const toNumber = (s: string) => (s.trim() === "" ? null : Number(s));
 
 /**
  * Settings screen (BACKLOG B1): the Gemini key (test/delete), model overrides, usage tier and
- * price table. The rate limiter reads the usage tier on the next launch; the cost estimate in
- * Step 4 reads the Flash price live. Opens on first launch when no key is stored (from App.tsx),
+ * price table. The rate limiter reads the usage tier on the next launch; the cost estimate before
+ * a run (Step 3) and the live cost (Step 4) read the Flash price. Opens on first launch when no key is stored (from App.tsx),
  * and any later time from the gear button in the header.
  */
 export function SettingsScreen({ onClose }: { onClose: () => void }) {
@@ -106,11 +106,15 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
     }
   }
 
-  function setPrice(which: "flashPrice" | "proPrice", patch: Partial<{ input: string; output: string }>) {
+  function setPrice(which: "flashPrice" | "proPrice", patch: Partial<{ input: string; cached: string; output: string }>) {
     const current = settings[which];
     const inputUsdPerMillion = patch.input !== undefined ? toNumber(patch.input) : (current?.inputUsdPerMillion ?? null);
+    const cachedInputUsdPerMillion = patch.cached !== undefined ? toNumber(patch.cached) : (current?.cachedInputUsdPerMillion ?? null);
     const outputUsdPerMillion = patch.output !== undefined ? toNumber(patch.output) : (current?.outputUsdPerMillion ?? null);
-    const price = inputUsdPerMillion == null && outputUsdPerMillion == null ? null : { inputUsdPerMillion: inputUsdPerMillion ?? 0, outputUsdPerMillion: outputUsdPerMillion ?? 0 };
+    const price =
+      inputUsdPerMillion == null && cachedInputUsdPerMillion == null && outputUsdPerMillion == null
+        ? null
+        : { inputUsdPerMillion: inputUsdPerMillion ?? 0, cachedInputUsdPerMillion, outputUsdPerMillion: outputUsdPerMillion ?? 0 };
     setSettingsState({ ...settings, [which]: price });
   }
 
@@ -167,11 +171,18 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
 
         <div className="flex flex-col gap-3">
           <Label>Gemini price table (USD per 1,000,000 tokens)</Label>
-          <Help>From the Gemini pricing page. Once set, Step 4 shows a live running cost for the simulation.</Help>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+          <Help>
+            From the Gemini pricing page. Once the Flash price is set, Step 3 estimates a run&apos;s cost and Step 4 shows it live. Cached input is the price for
+            tokens Gemini serves from its cache (usually a tenth of input); left empty, they are charged at the input price.
+          </Help>
+          <div className="grid grid-cols-3 gap-x-6 gap-y-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="flash-input">Flash input</Label>
               <input id="flash-input" type="number" min={0} step="0.001" className={pillField} value={toText(settings.flashPrice?.inputUsdPerMillion)} onChange={(e) => setPrice("flashPrice", { input: e.target.value })} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="flash-cached">Flash cached input</Label>
+              <input id="flash-cached" type="number" min={0} step="0.001" className={pillField} value={toText(settings.flashPrice?.cachedInputUsdPerMillion)} onChange={(e) => setPrice("flashPrice", { cached: e.target.value })} />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="flash-output">Flash output</Label>
@@ -180,6 +191,10 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
             <div className="flex flex-col gap-2">
               <Label htmlFor="pro-input">Pro input</Label>
               <input id="pro-input" type="number" min={0} step="0.001" className={pillField} value={toText(settings.proPrice?.inputUsdPerMillion)} onChange={(e) => setPrice("proPrice", { input: e.target.value })} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="pro-cached">Pro cached input</Label>
+              <input id="pro-cached" type="number" min={0} step="0.001" className={pillField} value={toText(settings.proPrice?.cachedInputUsdPerMillion)} onChange={(e) => setPrice("proPrice", { cached: e.target.value })} />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="pro-output">Pro output</Label>

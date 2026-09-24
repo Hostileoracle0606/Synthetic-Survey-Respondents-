@@ -8,6 +8,7 @@ use tauri::State;
 
 use survey_core::db::{cohorts, projects, runs, settings as settings_db, surveys};
 use survey_core::engine::cohort::{self, CohortJob};
+use survey_core::engine::critic;
 use survey_core::engine::draft::{self, DraftBrief, DraftJob};
 use survey_core::engine::persona::PROMPT_VERSION;
 use survey_core::engine::run::{self as sim, Mode};
@@ -15,10 +16,10 @@ use survey_core::engine::synthesis::{self, SynthesisJob};
 use survey_core::llm::gemini::{drafting_model, newest_stable, GeminiClient};
 use survey_core::llm::LlmProvider;
 use survey_core::model::{
-    Cohort, CohortConfig, CohortProgress, CohortSummary, CountryOption, CrossTab, DraftStatus,
-    ExportFormat, Project, Question, QuestionBody, QuotaGroup, Report, RespondentDetail,
-    RespondentPage, RunConfig, RunProgress, RunStatus, Settings, SimulationRun, Survey, SurveyInfo,
-    SynthesisStatus,
+    Cohort, CohortConfig, CohortProgress, CohortSummary, CostEstimate, CountryOption, CrossTab,
+    DraftStatus, ExportFormat, Project, Question, QuestionBody, QuotaGroup, Report,
+    RespondentDetail, RespondentPage, RunConfig, RunProgress, RunStatus, Settings, SimulationRun,
+    Survey, SurveyInfo, SynthesisStatus,
 };
 use survey_core::report::{self, export};
 use survey_core::{sampling, AppError, AppResult, ErrorCode};
@@ -245,29 +246,32 @@ pub fn lock_cohort(state: State<'_, AppState>, cohort_id: i64) -> AppResult<Coho
     cohorts::lock(&*lock(&state)?, cohort_id)
 }
 
+/// What the drafter sees (DATA_FLOW §4): research type, category, countries and objective.
+fn draft_brief(conn: &rusqlite::Connection, project_id: i64) -> AppResult<DraftBrief> {
+    let p = projects::get_project(conn, project_id)?;
+    let research_type = p
+        .research_type
+        .ok_or_else(|| AppError::invalid("choose a research type first"))?;
+    Ok(DraftBrief {
+        research_type,
+        product_category: p.product_category.clone(),
+        countries: p
+            .countries
+            .iter()
+            .map(|c| survey_core::countries::find(c).map_or_else(|| c.clone(), |x| x.name.clone()))
+            .collect(),
+        title: p.title.clone(),
+        objective: p.research_goal.clone(),
+    })
+}
+
 /// Marks the survey `generating` and starts the draft job; the outcome is stored on the survey.
 async fn start_draft(state: &State<'_, AppState>, survey: &Survey) -> AppResult<()> {
     let client = gemini()?;
     let model = draft_model(state, &client).await?;
     let (brief, survey_id) = {
         let conn = lock(state)?;
-        let p = projects::get_project(&conn, survey.project_id)?;
-        let research_type = p
-            .research_type
-            .ok_or_else(|| AppError::invalid("choose a research type first"))?;
-        let brief = DraftBrief {
-            research_type,
-            product_category: p.product_category.clone(),
-            countries: p
-                .countries
-                .iter()
-                .map(|c| {
-                    survey_core::countries::find(c).map_or_else(|| c.clone(), |x| x.name.clone())
-                })
-                .collect(),
-            title: p.title.clone(),
-            objective: p.research_goal.clone(),
-        };
+        let brief = draft_brief(&conn, survey.project_id)?;
         surveys::set_generation(
             &conn,
             survey.id,
@@ -313,13 +317,91 @@ pub async fn redraft_survey(state: State<'_, AppState>, project_id: i64) -> AppR
     surveys::get(&*lock(&state)?, survey.id)
 }
 
+/// Suggest more: one Gemini call adds new suggestions to the sidebar, leaving out any that
+/// repeat a question or suggestion the survey already has. The critic then checks them.
 #[tauri::command]
-pub fn update_question(
+pub async fn suggest_more(state: State<'_, AppState>, survey_id: i64) -> AppResult<Survey> {
+    let client = gemini()?;
+    let model = draft_model(&state, &client).await?;
+    let (brief, existing) = {
+        let conn = lock(&state)?;
+        let survey = surveys::get(&conn, survey_id)?;
+        if survey.draft_status == DraftStatus::Generating {
+            return Err(AppError::invalid("wait for the draft to finish"));
+        }
+        (
+            draft_brief(&conn, survey.project_id)?,
+            surveys::all_texts(&conn, survey_id)?,
+        )
+    };
+    let job = DraftJob {
+        survey_id,
+        brief,
+        model,
+    };
+    let llm: Arc<dyn LlmProvider> = Arc::new(client);
+    let targets = draft::suggest_more(&job, &llm, &state.limiter, &state.writer, existing).await?;
+    let (limiter, writer) = (state.limiter.clone(), state.writer.clone());
+    tauri::async_runtime::spawn(async move {
+        let _ = critic::run(targets, job.model, llm, limiter, writer).await;
+    });
+    surveys::get(&*lock(&state)?, survey_id)
+}
+
+/// Step 3: the survey title and the intro respondents see before the first question.
+#[tauri::command]
+pub fn update_survey_text(
+    state: State<'_, AppState>,
+    survey_id: i64,
+    title: String,
+    intro: String,
+) -> AppResult<Survey> {
+    surveys::update_text(&*lock(&state)?, survey_id, &title, &intro)
+}
+
+/// Marks the questions as being checked and starts the critic in the background; each
+/// result is stored on its question.
+async fn start_critic(state: &State<'_, AppState>, question_ids: &[i64]) -> AppResult<()> {
+    let client = gemini()?;
+    let model = draft_model(state, &client).await?;
+    let targets = {
+        let conn = lock(state)?;
+        question_ids
+            .iter()
+            .map(|id| surveys::start_critique(&conn, *id, critic::PROMPT_VERSION))
+            .collect::<AppResult<Vec<_>>>()?
+    };
+    let llm: Arc<dyn LlmProvider> = Arc::new(client);
+    let (limiter, writer) = (state.limiter.clone(), state.writer.clone());
+    tauri::async_runtime::spawn(async move {
+        let _ = critic::run(targets, model, llm, limiter, writer).await;
+    });
+    Ok(())
+}
+
+/// Saves an edit, then has the critic check the new wording. The edit is kept even when the
+/// check can't start (no key, offline): the flags are advice, not a gate.
+#[tauri::command]
+pub async fn update_question(
     state: State<'_, AppState>,
     question_id: i64,
     body: QuestionBody,
 ) -> AppResult<Question> {
-    surveys::update_question(&*lock(&state)?, question_id, body)
+    let q = surveys::update_question(&*lock(&state)?, question_id, body)?;
+    if start_critic(&state, &[q.id]).await.is_err() {
+        return Ok(q);
+    }
+    surveys::question(&*lock(&state)?, question_id)
+}
+
+/// "Check again": runs the critic on the question's current wording.
+#[tauri::command]
+pub async fn critique_question(
+    state: State<'_, AppState>,
+    question_id: i64,
+) -> AppResult<Question> {
+    start_critic(&state, &[question_id]).await?;
+    surveys::question(&*lock(&state)?, question_id)
 }
 
 #[tauri::command]
@@ -351,6 +433,13 @@ pub fn add_suggestion(state: State<'_, AppState>, question_id: i64) -> AppResult
     surveys::add_suggestion(&*lock(&state)?, question_id)
 }
 
+/// Shown before Run Survey Simulation: calls, tokens and cost for the answering model.
+#[tauri::command]
+pub async fn estimate_run(state: State<'_, AppState>, project_id: i64) -> AppResult<CostEstimate> {
+    let model = flash_model(&state, &gemini()?).await?;
+    runs::estimate(&*lock(&state)?, project_id, &model)
+}
+
 /// Run Survey Simulation: approves the survey and creates the run in one transaction (the
 /// database refuses it if any question is unreviewed), then starts answering.
 #[tauri::command]
@@ -366,16 +455,21 @@ pub async fn start_simulation(
     let left = limits
         .requests_per_day
         .saturating_sub(state.limiter.used_today().await);
-    let run = runs::start(
-        &*lock(&state)?,
-        project_id,
-        &config,
-        &runs::RunSettings {
-            model: &model,
-            max_concurrency: limits.max_concurrency,
-            requests_left_today: left,
-        },
-    )?;
+    let run = {
+        let conn = lock(&state)?;
+        let est_cost_usd = runs::estimate(&conn, project_id, &model)?.cost_usd;
+        runs::start(
+            &conn,
+            project_id,
+            &config,
+            &runs::RunSettings {
+                model: &model,
+                max_concurrency: limits.max_concurrency,
+                requests_left_today: left,
+                est_cost_usd,
+            },
+        )?
+    };
     if let Err(e) = launch(&state, client, run.id, on_progress).await {
         // Don't leave a queued run behind: it would block every later start.
         runs::set_status(&*lock(&state)?, run.id, RunStatus::Failed, Some(&e.message))?;

@@ -53,6 +53,7 @@ mod tests {
             flash_price: Some(ModelPrice {
                 input_usd_per_million: 0.075,
                 output_usd_per_million: 0.30,
+                cached_input_usd_per_million: Some(0.0075),
             }),
             pro_price: None,
         };

@@ -1,4 +1,5 @@
-//! SQLite storage. The schema lives in `docs/schema.sql` and is the first migration.
+//! SQLite storage. The schema lives in `docs/schema.sql` and is the first migration; later
+//! changes are the numbered files in `docs/migrations/`, applied in order.
 //! Every connection gets the same PRAGMAs; all writes go through [`writer::Writer`].
 
 pub mod cohorts;
@@ -31,8 +32,16 @@ static SCHEMA_BODY: LazyLock<String> = LazyLock::new(|| {
         .join("\n")
 });
 
+/// Changes after the first release of the schema, in order. Never edit one once released.
+const LATER: &[&str] = &[
+    include_str!("../../../../docs/migrations/002_survey_text_edited.sql"),
+    include_str!("../../../../docs/migrations/003_question_critique.sql"),
+];
+
 pub fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(SCHEMA_BODY.as_str())])
+    let mut all = vec![M::up(SCHEMA_BODY.as_str())];
+    all.extend(LATER.iter().map(|sql| M::up(sql)));
+    Migrations::new(all)
 }
 
 pub fn configure(conn: &Connection) -> AppResult<()> {
@@ -96,7 +105,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 1 + LATER.len() as i64);
     }
 
     #[test]

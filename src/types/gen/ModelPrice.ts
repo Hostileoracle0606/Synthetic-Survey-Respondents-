@@ -4,4 +4,9 @@
  * USD per 1,000,000 tokens, as published on the Gemini pricing page. The user copies these in;
  * the app has no way to read them back from a key.
  */
-export type ModelPrice = { inputUsdPerMillion: number, outputUsdPerMillion: number, };
+export type ModelPrice = { inputUsdPerMillion: number, outputUsdPerMillion: number, 
+/**
+ * Input tokens served from Gemini's implicit cache, usually a tenth of the input price.
+ * None charges them at the full input price, so the cost is never understated.
+ */
+cachedInputUsdPerMillion: number | null, };

@@ -17,6 +17,7 @@ import type { Project } from "../types/gen/Project";
 import type { QuotaGroup } from "../types/gen/QuotaGroup";
 import type { RespondentDetail } from "../types/gen/RespondentDetail";
 import type { RespondentPage } from "../types/gen/RespondentPage";
+import type { CostEstimate } from "../types/gen/CostEstimate";
 import type { CrossTab } from "../types/gen/CrossTab";
 import type { ExportFormat } from "../types/gen/ExportFormat";
 import type { Question } from "../types/gen/Question";
@@ -78,8 +79,12 @@ export const api = {
   lockCohort: (cohortId: number): Promise<Cohort> => (inTauri ? invoke("lock_cohort", { cohortId }) : mock.lockCohort()),
   getSurvey: (projectId: number): Promise<Survey> => (inTauri ? invoke("get_survey", { projectId }) : mock.getSurvey()),
   redraftSurvey: (projectId: number): Promise<Survey> => (inTauri ? invoke("redraft_survey", { projectId }) : mock.redraftSurvey()),
+  updateSurveyText: (surveyId: number, title: string, intro: string): Promise<Survey> =>
+    inTauri ? invoke("update_survey_text", { surveyId, title, intro }) : mock.updateSurveyText(title, intro),
   updateQuestion: (questionId: number, body: QuestionBody): Promise<Question> =>
     inTauri ? invoke("update_question", { questionId, body }) : mock.updateQuestion(questionId, body),
+  critiqueQuestion: (questionId: number): Promise<Question> =>
+    inTauri ? invoke("critique_question", { questionId }) : mock.critiqueQuestion(questionId),
   reorderQuestions: (surveyId: number, orderedIds: number[]): Promise<Survey> =>
     inTauri ? invoke("reorder_questions", { surveyId, orderedIds }) : mock.reorderQuestions(orderedIds),
   addQuestion: (surveyId: number): Promise<Question> => (inTauri ? invoke("add_question", { surveyId }) : mock.addQuestion()),
@@ -89,6 +94,10 @@ export const api = {
     inTauri ? invoke("approve_question", { questionId }) : mock.approveQuestion(questionId),
   addSuggestion: (questionId: number): Promise<Survey> =>
     inTauri ? invoke("add_suggestion", { questionId }) : mock.addSuggestion(questionId),
+  suggestMore: (surveyId: number): Promise<Survey> =>
+    inTauri ? invoke("suggest_more", { surveyId }) : mock.suggestMore(),
+  estimateRun: (projectId: number): Promise<CostEstimate> =>
+    inTauri ? invoke("estimate_run", { projectId }) : mock.estimateRun(),
   startSimulation: (projectId: number, config: RunConfig, onProgress: (p: RunProgress) => void): Promise<SimulationRun> =>
     inTauri
       ? invoke("start_simulation", { projectId, config, onProgress: progressChannel<RunProgress>(onProgress) })

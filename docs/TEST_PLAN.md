@@ -142,7 +142,7 @@ Covers SM4, SM5, SM6.
 | `draft_never_sees_personas` | Draft, regenerate and add questions with a locked cohort in the project | No request recorded by `ScriptedLlm` for `survey_draft` contains any persona or cohort text |
 | `draft_schema_has_no_predictions` | Generated schema | `SurveyDraftOutput` has no field for expected answers or distributions |
 | `answer_prompt_excludes_intent` | Run on an approved survey | Answer prompts contain question text and options only; no objective, rationale or critic text |
-| `approve_blocked` | One question still `pending`, or one critic flag open | `approve_survey` returns `AppError` listing them; survey stays `in_review` |
+| `approve_blocked` | One question still `pending` | The run is refused and the survey stays `in_review`. An open critic flag does not block approval (advice only; `a_critique_is_stored_with_its_question_and_cleared_by_an_edit`) |
 | `regenerate_replaces_pending` | Regenerate a pending question with an instruction | Old question replaced; new one `pending`; the instruction appears in the request |
 | `invalid_draft_retry` | First draft reply violates the schema | Retried once with the error; then fails with a typed error and no partial survey |
 | `progress_batching` | 2,000 answers | Channel receives ≥ 8 batch messages, none more often than every 250 ms of simulated time; final `completed` count equals rows in DB |
@@ -172,7 +172,7 @@ Covers SM2, SM12.
 | `option_order_reproducible` | Two runs with the same seed store identical `shown_options_json` per respondent |
 | `run_snapshot_complete` | `simulation_runs` stores provider, model, temperature, answer mode, prompt version, seed and survey hash |
 | `survey_edit_changes_hash` | Editing any active question changes `survey_hash`; toggling an inactive one does not |
-| `prompt_snapshot` (`insta`) | Rendered prompts for fixed persona + survey match reviewed snapshots; any prompt change shows as a diff in review |
+| `prompt_snapshot` (`insta`) | Rendered prompts for fixed persona + survey match reviewed snapshots, stored under the prompt version (`crates/core/tests/snapshots/`); changing a prompt without bumping its version fails, and a bumped one shows as a new snapshot in review |
 
 ### S7 — Performance and resources (nightly and release)
 

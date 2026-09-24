@@ -118,7 +118,7 @@ Gemini writes the first draft of the survey; a person reviews every question. No
 **Steps**
 
 1. **Draft.** One structured-output call to the Pro-tier model returns an intro text and the questions. Each question has a type, text, options or scale, the objective it serves, a one-line rationale and any suggested skip logic. The survey is saved with `status = 'in_review'`, and every question with `origin = 'ai'` and `review_status = 'pending'`.
-2. **Automatic critique.** `critique_survey` runs on the draft straight away. Flags such as leading, double-barrelled or loaded wording appear on each question card.
+2. **Automatic critique.** The critic (`critic.v1`) checks every drafted question straight away, and every edited one when it is saved; "Check again" (`critique_question`) reruns it. Leading, double-barrelled or unclear wording is flagged on each question card.
 3. **Human review.** For each question the reviewer can:
     - **accept** it as written;
     - **edit** it, which sets `origin = 'ai_edited'` and accepts it (the AI's original is kept in `original_json`);
@@ -127,7 +127,7 @@ Gemini writes the first draft of the survey; a person reviews every question. No
 
     The reviewer can also reorder questions, add their own (`origin = 'human'`) or ask for more questions for an objective.
 4. **Coverage check.** The review screen shows each objective with its accepted questions, and warns when an objective has none.
-5. **Approve.** `approve_survey` succeeds only when no active question is `pending`, at least one question is accepted and every critic flag has been fixed or dismissed. The survey becomes `approved`. Rejected questions are kept for the record but set inactive.
+5. **Approve.** `approve_survey` succeeds only when no active question is `pending` and at least one question is accepted. Critic flags are advice: they show on the question and are stored with it, but approving a question is the reviewer's call, so they never block approval. The survey becomes `approved`. Rejected questions are kept for the record but set inactive.
 6. **Edits after approval** send the survey back to `in_review`. Earlier runs are unaffected because each run stores a hash of the survey it used.
 
 **Independence rules**
@@ -217,7 +217,7 @@ v1 ships one adapter, for the Gemini API `generateContent` endpoint. It uses `ge
 - Prompt order is fixed for implicit caching: system rules → survey text and answer schema (identical for every respondent) → persona profile → instruction. Requests for the same survey are sent close together so cache hits are likely.
 - The system prompt tells the model to answer as the persona, including uncertainty, indifference and "don't know" where realistic.
 
-**Cost estimate.** Before a run, the UI shows estimated calls, input and output tokens and cost. The estimate uses a user-editable price table per model, stored in settings. Actual tokens from API usage fields are recorded per answer, and the run screen shows actual against estimated.
+**Cost estimate.** Before a run, the UI shows estimated calls, input and output tokens and cost. The estimate uses the Gemini prices the user enters in Settings (input, optional cached input and output, per million tokens, for Flash and Pro). Actual tokens from API usage fields are recorded per answer, and the run screen shows actual against estimated.
 
 **Model settings per run:** model ID, temperature (default 1.0), top-p, max output tokens and an optional second Gemini model for comparison runs.
 

@@ -6,6 +6,7 @@ import type { Question } from "../../types/gen/Question";
 import type { Survey } from "../../types/gen/Survey";
 import { AppShell } from "../../components/AppShell";
 import { Arrow, pillButton, primaryButton } from "../../components/fields";
+import { usd } from "../../lib/cost";
 
 const time = (ms: string) => {
   const n = Number(ms);
@@ -104,7 +105,7 @@ export function SimulationStep() {
   const cards: [string, string, string][] = [
     ["Answers collected", `${answered.toLocaleString()} / ${totalAnswers.toLocaleString()}`, `${pct}%`],
     ["Respondents complete", `${done} / ${run?.respondents ?? "—"}`, run ? `${run.questions} questions each` : ""],
-    ["API cost so far", stats?.costUsd != null ? `$${stats.costUsd.toFixed(2)}` : "$—", "Set Gemini prices in Settings to see cost"],
+    ["API cost so far", usd(stats?.costUsd ?? run?.costUsd), (stats?.costUsd ?? run?.costUsd) == null ? "Set the Flash price in Settings to see cost" : run?.estCostUsd != null ? `of ≈ ${usd(run.estCostUsd)} estimated` : "from token counts"],
     ["Latency", stats ? `${(stats.avgLatencyMs / 1000).toFixed(1)} s` : "—", stats ? `p95 ${(stats.p95LatencyMs / 1000).toFixed(1)} s` : "average per call"],
     ["Throughput", stats ? `${stats.answersPerMin}/min` : "—", stats ? `${stats.concurrency} calls at once` : "answers in the last minute"],
   ];

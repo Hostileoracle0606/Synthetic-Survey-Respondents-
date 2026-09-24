@@ -7,8 +7,10 @@ import type { Project } from "../types/gen/Project";
 import type { RespondentCard } from "../types/gen/RespondentCard";
 import type { RespondentDetail } from "../types/gen/RespondentDetail";
 import type { RespondentPage } from "../types/gen/RespondentPage";
+import type { CostEstimate } from "../types/gen/CostEstimate";
 import type { CrossTab } from "../types/gen/CrossTab";
 import type { ExportFormat } from "../types/gen/ExportFormat";
+import type { Critique } from "../types/gen/Critique";
 import type { Question } from "../types/gen/Question";
 import type { QuestionReport } from "../types/gen/QuestionReport";
 import type { Report } from "../types/gen/Report";
@@ -89,15 +91,55 @@ const SUGGESTED: [string, QuestionBody][] = [
   ["S2_CARRIER", { text: "How satisfied are you with your mobile carrier?", questionType: "likert", options: [], randomize: false, maxChoices: null, scale: { min: 1, max: 5, minLabel: "Very dissatisfied", maxLabel: "Very satisfied" }, numeric: null }],
 ];
 
+/** What the mock's "Suggest more" hands out, a few at a time, skipping any already present. */
+const MORE: [string, QuestionBody][] = [
+  ["S3_PAY", { text: "How do you usually pay for a new phone?", questionType: "single_choice", options: opts(["Outright", "Carrier plan", "Financing", "Other"]), randomize: true, maxChoices: null, scale: null, numeric: null }],
+  ["S4_REFURB", { text: "Would you consider a refurbished phone?", questionType: "likert", options: [], randomize: false, maxChoices: null, scale: { min: 1, max: 5, minLabel: "Definitely not", maxLabel: "Definitely" }, numeric: null }],
+  ["S5_SOURCE", { text: "Where do you look for information before buying a phone?", questionType: "multi_choice", options: opts(["Reviews", "Friends", "Store staff", "Social media"]), randomize: true, maxChoices: 2, scale: null, numeric: null }],
+  ["S6_KEEP", { text: "How many years do you expect to keep your next phone?", questionType: "numeric", options: [], randomize: false, maxChoices: null, scale: null, numeric: { min: 0, max: 10, unit: "years" } }],
+  ["S7_TRADEIN", { text: "Would a trade-in offer change when you upgrade?", questionType: "single_choice", options: opts(["Yes, sooner", "No difference", "Not sure"]), randomize: true, maxChoices: null, scale: null, numeric: null }],
+];
+
+/** Cost at the Flash price saved in Settings, like survey-core's `pricing`; null without one. */
+const costOf = (input: number, output: number) => {
+  const p = settings.flashPrice;
+  return p ? (input * p.inputUsdPerMillion + output * p.outputUsdPerMillion) / 1e6 : null;
+};
+let runCost: number | null = null;
+
 let survey: Survey | null = null;
 let nextId = 100;
 let run: SimulationRun | null = null;
 let runTimer: ReturnType<typeof setInterval> | null = null;
 let runListener: ((p: RunProgress) => void) | null = null;
 
+/** Stand-in for the Gemini critic: flags obvious leading or double-barrelled wording. */
+function mockCritique(b: QuestionBody): Critique {
+  const flags: Critique["flags"] = [];
+  if (/\b(love|amazing|great|don't you|wouldn't you)\b/i.test(b.text))
+    flags.push({ issue: "leading", note: "The wording suggests the answer. Ask neutrally, e.g. \"How would you rate…\"." });
+  if (/\b(and|or)\b/i.test(b.text.replace(/\?.*$/, "")) && b.questionType !== "multi_choice")
+    flags.push({ issue: "double_barrelled", note: "This may ask about two things at once. Split it into two questions if so." });
+  if (b.text.trim().split(/\s+/).length < 4) flags.push({ issue: "unclear", note: "Too short to be clear to a respondent. Say exactly what is being asked." });
+  return { status: "done", flags, error: null, promptVersion: "critic.v1" };
+}
+
+/** Marks a question as being checked and fills in the result shortly after, like the real job. */
+function checkLater(x: Question): Question {
+  const body = x.body;
+  setTimeout(() => {
+    const s = survey;
+    if (!s) return;
+    const done = (y: Question) => (y.id === x.id && y.body === body ? { ...y, critique: mockCritique(body) } : y);
+    s.questions = s.questions.map(done);
+    s.suggestions = s.suggestions.map(done);
+  }, 900);
+  return { ...x, critique: { status: "checking", flags: [], error: null, promptVersion: "critic.v1" } };
+}
+
 function q(code: string, body: QuestionBody, active: boolean): Question {
   const id = nextId++;
-  return { id, code, orderIndex: id, body, isActive: active, origin: "ai", reviewStatus: active ? "pending" : "suggested", objective: "Purchase intent and drivers", rationale: "Preview question." };
+  return { id, code, orderIndex: id, body, isActive: active, origin: "ai", reviewStatus: active ? "pending" : "suggested", objective: "Purchase intent and drivers", rationale: "Preview question.", critique: mockCritique(body) };
 }
 
 function ensureSurvey(): Survey {
@@ -146,8 +188,10 @@ function tickRun(onProgress: (p: RunProgress) => void) {
         consoleLines.push({ at: String(Date.now()), respondent: p.ordinal, question: qq.code, answer: pick?.label ?? (value != null ? String(value) : "Only if my phone breaks."), reason: "Preview answer." });
       }
     }
-    run = { ...run, respondentsDone: end, answered: end * s.questions.length };
-    onProgress({ kind: "batch", answered: run.answered, totalAnswers: total, respondentsDone: end, costUsd: null, avgLatencyMs: 4200, p95LatencyMs: 7900, answersPerMin: 12 * s.questions.length * 3, concurrency: 4, deltas, console: consoleLines.slice(-20) });
+    const batch = costOf(2600 * (end - start), (300 + 45 * s.questions.length) * (end - start));
+    if (batch != null) runCost = (runCost ?? 0) + batch;
+    run = { ...run, respondentsDone: end, answered: end * s.questions.length, costUsd: runCost };
+    onProgress({ kind: "batch", answered: run.answered, totalAnswers: total, respondentsDone: end, costUsd: runCost, avgLatencyMs: 4200, p95LatencyMs: 7900, answersPerMin: 12 * s.questions.length * 3, concurrency: 4, deltas, console: consoleLines.slice(-20) });
     if (end >= people.length) {
       clearInterval(runTimer!);
       run = { ...run, status: "completed" };
@@ -260,8 +304,17 @@ export const mock = {
     fresh.questions = s.questions;
     return structuredClone(fresh);
   },
+  updateSurveyText: async (title: string, intro: string): Promise<Survey> => {
+    const s = ensureSurvey();
+    if (!title.trim()) throw { code: "invalid_input", message: "the survey needs a title" };
+    if (s.intro !== intro.trim() && s.status === "approved") s.status = "in_review";
+    s.title = title.trim();
+    s.intro = intro.trim();
+    return structuredClone(s);
+  },
   updateQuestion: async (id: number, body: QuestionBody): Promise<Question> =>
-    structuredClone(patchQuestion(id, (x) => ({ ...x, body, origin: x.origin === "ai" ? "ai_edited" : x.origin, reviewStatus: "pending" }))),
+    structuredClone(patchQuestion(id, (x) => checkLater({ ...x, body, origin: x.origin === "ai" ? "ai_edited" : x.origin, reviewStatus: "pending" }))),
+  critiqueQuestion: async (id: number): Promise<Question> => structuredClone(patchQuestion(id, checkLater)),
   reorderQuestions: async (ids: number[]): Promise<Survey> => {
     const s = ensureSurvey();
     s.questions = ids.map((id, i) => ({ ...s.questions.find((x) => x.id === id)!, orderIndex: i + 1 }));
@@ -269,7 +322,7 @@ export const mock = {
   },
   addQuestion: async (): Promise<Question> => {
     const s = ensureSurvey();
-    const nq: Question = { ...q(`Q${s.questions.length + 1}`, { text: "New question", questionType: "single_choice", options: opts(["Option 1", "Option 2"]), randomize: true, maxChoices: null, scale: null, numeric: null }, true), origin: "human", objective: null, rationale: null };
+    const nq: Question = { ...q(`Q${s.questions.length + 1}`, { text: "New question", questionType: "single_choice", options: opts(["Option 1", "Option 2"]), randomize: true, maxChoices: null, scale: null, numeric: null }, true), origin: "human", objective: null, rationale: null, critique: null };
     s.questions.push(nq);
     return structuredClone(nq);
   },
@@ -286,11 +339,29 @@ export const mock = {
     s.questions.push({ ...sug, isActive: true, reviewStatus: "pending" });
     return structuredClone(s);
   },
+  suggestMore: async (): Promise<Survey> => {
+    const s = ensureSurvey();
+    await new Promise((r) => setTimeout(r, 600));
+    const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+    const have = new Set([...s.questions, ...s.suggestions].map((x) => words(x.body.text)));
+    const fresh = MORE.filter(([, b]) => !have.has(words(b.text))).slice(0, 3);
+    s.suggestions.push(...fresh.map(([c, b]) => checkLater(q(c, b, false))));
+    return structuredClone(s);
+  },
+  estimateRun: async (): Promise<CostEstimate> => {
+    const s = ensureSurvey();
+    const calls = people.length;
+    const inputTokens = calls * 2600;
+    const outputTokens = calls * (300 + s.questions.reduce((a, x) => a + (x.body.questionType === "open_ended" ? 100 : 45), 0));
+    return { model: "gemini-mock-flash", calls, inputTokens, outputTokens, costUsd: costOf(inputTokens, outputTokens), outputFromHistory: false };
+  },
   startSimulation: async (onProgress: (p: RunProgress) => void): Promise<SimulationRun> => {
     const s = ensureSurvey();
     if (s.questions.some((x) => x.reviewStatus !== "accepted")) throw { code: "survey_not_approved", message: "Every question must be approved first." };
     s.status = "approved";
-    run = { id: (run?.id ?? 0) + 1, projectId: s.projectId, surveyId: s.id, cohortId: cohort?.id ?? 1, status: "running", model: "gemini-mock-flash", promptVersion: "answer.v2", respondents: people.length, questions: s.questions.length, answered: 0, respondentsDone: 0, error: null, createdAt: new Date().toISOString() };
+    runCost = settings.flashPrice ? 0 : null;
+    const est = await mock.estimateRun();
+    run = { id: (run?.id ?? 0) + 1, projectId: s.projectId, surveyId: s.id, cohortId: cohort?.id ?? 1, status: "running", model: "gemini-mock-flash", promptVersion: "answer.v2", respondents: people.length, questions: s.questions.length, answered: 0, respondentsDone: 0, error: null, createdAt: new Date().toISOString(), estCostUsd: est.costUsd, costUsd: runCost };
     tickRun(onProgress);
     return structuredClone(run);
   },

@@ -110,18 +110,15 @@ The plan has five milestones. M1 (skeleton and contracts) is mostly done by the 
 
 **Exit:** a survey is drafted, reviewed and approved; a run on an unapproved survey is refused by the database; the six acceptance tests in SPEC §11 pass, including kill-and-relaunch and the forced 30% 429 test against the mock.
 
-**Status (2026-09-23):** built:
-- **Items 1, 3–8 and 10–11.** The draft uses the newest stable Pro model the key can use, and falls back to Flash.
-- **Item 9, in part.** `survey_draft.v1` and `answer.v1` exist. Ignored live tests cover both.
+**Status (2026-09-24):** built:
+- **All eleven items.** The draft uses the newest stable Pro model the key can use, and falls back to Flash.
+- **Item 2, the critic (B9).** `critic.v1` checks every drafted question and suggestion, and each edit when saved; flags are stored with the question and shown in Step 3. They are advice and never block approval.
+- **Item 3, `suggest_more` (B10)**, deduplicated against every question and suggestion in the survey.
+- **Item 4 and 7, cost (B12).** `estimate_run` before the run (stored as `est_cost_usd`) and the live cost in `RunProgress`, priced with the Flash price saved in Settings (B1) by `survey_core::pricing`.
+- **Item 9 (B13).** `insta` snapshots of `survey_draft.v1`, `answer.v2` and `critic.v1`, and the nightly `live_implicit_cache_hits` check.
+- **Item 10, drag reordering (B11)**, alongside the up/down buttons and Alt+↑/↓; the survey title and respondent intro are editable in Step 3 (B16).
 
-Deferred to the backlog:
-- the critic (item 2);
-- `suggest_more` (item 3);
-- drag reordering: up/down buttons and Alt+↑/↓ are built instead;
-- cost figures, which need the price table;
-- `insta` snapshots and the nightly `cached_tokens` check (item 9).
-
-See BACKLOG B9–B15.
+Still open: B14 (60 fps and memory with 1,000 respondents), which needs the M5 Windows VMs.
 
 Exit criteria:
 - Drafted, reviewed and approved: done (`db::surveys` and `engine::draft` tests; browser pass on the mock).
@@ -132,7 +129,7 @@ Exit criteria:
   - Forced 30% 429s complete with reduced concurrency: done.
   - Same seed gives the same option orders: done.
   - 60 fps and memory with 1,000 respondents: measured on `windows-latest` by the release `perf` job. Frame rate passes (100% of frames on time). Memory is over budget: app 57 MB (≤ 50), WebView2 renderer 170 MB (≤ 100) (B14).
-  - No API key in the database, logs or exports: not yet. It waits for exports in M4 (B15).
+  - No API key in the database, logs or exports: done in M4 (B15).
 
 ## M4 — Report: Step 5 (about 1.5 weeks)
 
