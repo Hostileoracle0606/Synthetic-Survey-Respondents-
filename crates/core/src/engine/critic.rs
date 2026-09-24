@@ -101,6 +101,7 @@ pub fn build_request(model: &str, body: &QuestionBody) -> StructuredRequest {
         temperature: 0.2,
         // Gemini 3.x counts its thinking as output.
         max_output_tokens: 8_192,
+        logprobs: false,
     }
 }
 

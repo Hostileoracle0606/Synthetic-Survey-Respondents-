@@ -214,6 +214,7 @@ pub fn build_request(model: &str, input: &BatchInput<'_>) -> StructuredRequest {
         schema: reply_schema(input.category),
         temperature: 1.0,
         max_output_tokens: 1_200 * input.skeletons.len() as u32 + 2_000,
+        logprobs: false,
     }
 }
 

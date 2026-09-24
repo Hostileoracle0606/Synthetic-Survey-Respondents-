@@ -128,7 +128,7 @@ async fn thousand_by_twenty_stays_within_the_rust_memory_budget() {
     let run_id = runs::start(
         &conn,
         1,
-        &RunConfig { seed: None },
+        &RunConfig { seed: None, logprobs: false },
         &RunSettings {
             model: "flash",
             max_concurrency: 10,

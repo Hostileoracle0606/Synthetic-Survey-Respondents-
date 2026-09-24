@@ -51,6 +51,7 @@ pub fn request(model: &str, category: &str, count: usize) -> StructuredRequest {
         schema: schema(),
         temperature: 0.8,
         max_output_tokens: 16_384,
+        logprobs: false,
     }
 }
 

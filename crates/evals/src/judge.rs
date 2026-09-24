@@ -109,6 +109,7 @@ pub fn judge_request(
         }),
         temperature: 0.0,
         max_output_tokens: 8_192, // thinking tokens count as output on Gemini 3.x
+        logprobs: false,
     }
 }
 

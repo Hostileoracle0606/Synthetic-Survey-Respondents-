@@ -17,6 +17,10 @@ pub struct StructuredRequest {
     pub schema: serde_json::Value,
     pub temperature: f32,
     pub max_output_tokens: u32,
+    /// Distribution mode (docs/SPEC.md §8, BACKLOG B23): ask for per-token log-probabilities.
+    /// Only meaningful for a single-question request; a multi-question reply mixes too many
+    /// output tokens to attribute a probability to one question's answer.
+    pub logprobs: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,6 +35,10 @@ pub struct StructuredResponse {
     pub json: serde_json::Value,
     pub usage: Usage,
     pub latency_ms: u64,
+    /// The raw `logprobsResult` (Gemini's documented shape: `topCandidates` and
+    /// `chosenCandidates`, one entry per output token), when `logprobs` was requested and the
+    /// model returned it. `None` otherwise, including when the model doesn't support it.
+    pub logprobs: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

@@ -103,6 +103,7 @@ impl LlmProvider for GeminiClient {
             json,
             usage,
             latency_ms: started.elapsed().as_millis() as u64,
+            logprobs: logprobs_result(&body),
         })
     }
 
@@ -115,17 +116,52 @@ impl LlmProvider for GeminiClient {
     }
 }
 
+impl GeminiClient {
+    /// Distribution mode (docs/SPEC.md §8, BACKLOG B23): a tiny real call with
+    /// `responseLogprobs` on, to see whether `model` actually returns log-probabilities (not
+    /// every Gemini model does). Errors count as unsupported rather than failing the caller.
+    pub async fn probe_logprobs(&self, model: &str) -> bool {
+        let probe = StructuredRequest {
+            model: model.to_string(),
+            system: "Reply with JSON only.".into(),
+            prompt: "Pick a number.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": { "choice": { "type": "integer", "minimum": 1, "maximum": 2 } },
+                "required": ["choice"]
+            }),
+            temperature: 0.0,
+            max_output_tokens: 64,
+            logprobs: true,
+        };
+        matches!(self.complete_structured(&probe).await, Ok(r) if r.logprobs.is_some())
+    }
+}
+
 pub fn request_body(req: &StructuredRequest) -> Value {
+    let mut generation_config = json!({
+        "responseMimeType": "application/json",
+        "responseJsonSchema": req.schema,
+        "temperature": req.temperature,
+        "maxOutputTokens": req.max_output_tokens,
+    });
+    if req.logprobs {
+        generation_config["responseLogprobs"] = json!(true);
+        // Top alternates per output token position; enough to usually cover every option in a
+        // single-question distribution-mode call (SPEC §8), without asking for more than needed.
+        generation_config["logprobs"] = json!(8);
+    }
     json!({
         "systemInstruction": { "parts": [{ "text": req.system }] },
         "contents": [{ "role": "user", "parts": [{ "text": req.prompt }] }],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseJsonSchema": req.schema,
-            "temperature": req.temperature,
-            "maxOutputTokens": req.max_output_tokens,
-        }
+        "generationConfig": generation_config,
     })
+}
+
+/// The raw `logprobsResult` from a 200 response, if the model returned one.
+fn logprobs_result(body: &Value) -> Option<Value> {
+    let r = &body["candidates"][0]["logprobsResult"];
+    (!r.is_null()).then(|| r.clone())
 }
 
 /// Extracts the JSON reply and token usage from a 200 response.
@@ -225,6 +261,7 @@ mod tests {
             schema: json!({ "type": "object", "properties": { "q1": { "type": "string" } }, "required": ["q1"] }),
             temperature: 1.0,
             max_output_tokens: 512,
+            logprobs: false,
         }
     }
 
@@ -327,6 +364,72 @@ mod tests {
         let resp = client.complete_structured(&req()).await.unwrap();
         assert_eq!(resp.json["q1"], "B");
         assert_eq!(resp.usage.cached_tokens, 600);
+    }
+
+    #[test]
+    fn logprobs_is_off_by_default_and_asked_for_when_set() {
+        let plain = request_body(&req());
+        assert!(plain["generationConfig"].get("responseLogprobs").is_none());
+        let mut asked = req();
+        asked.logprobs = true;
+        let body = request_body(&asked);
+        assert_eq!(body["generationConfig"]["responseLogprobs"], true);
+        assert_eq!(body["generationConfig"]["logprobs"], 8);
+    }
+
+    #[test]
+    fn logprobs_result_is_carried_through_the_reply() {
+        // Google's documented shape: one entry per output token, each with its top alternates.
+        let body = json!({
+            "candidates": [{
+                "content": { "parts": [{ "text": "{\"choice\":2}" }] },
+                "finishReason": "STOP",
+                "logprobsResult": {
+                    "topCandidates": [{
+                        "candidates": [
+                            { "token": "2", "logProbability": -0.1 },
+                            { "token": "1", "logProbability": -2.3 }
+                        ]
+                    }],
+                    "chosenCandidates": [{ "token": "2", "logProbability": -0.1 }]
+                }
+            }]
+        });
+        assert!(logprobs_result(&body).is_some());
+        assert!(logprobs_result(&ok_body()).is_none());
+    }
+
+    #[tokio::test]
+    async fn end_to_end_reply_carries_logprobs_when_present() {
+        let server = MockServer::start().await;
+        let body = json!({
+            "candidates": [{
+                "content": { "parts": [{ "text": "{\"choice\":2}" }] },
+                "finishReason": "STOP",
+                "logprobsResult": { "topCandidates": [], "chosenCandidates": [] }
+            }],
+            "usageMetadata": { "promptTokenCount": 10, "candidatesTokenCount": 4 }
+        });
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .mount(&server)
+            .await;
+        let client = GeminiClient::with_base_url("test-key", server.uri());
+        let mut req = req();
+        req.logprobs = true;
+        let resp = client.complete_structured(&req).await.unwrap();
+        assert!(resp.logprobs.is_some());
+    }
+
+    #[tokio::test]
+    async fn probe_logprobs_is_false_on_a_model_that_never_returns_them() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(ok_body()))
+            .mount(&server)
+            .await;
+        let client = GeminiClient::with_base_url("test-key", server.uri());
+        assert!(!client.probe_logprobs("gemini-test-flash").await);
     }
 
     #[tokio::test]

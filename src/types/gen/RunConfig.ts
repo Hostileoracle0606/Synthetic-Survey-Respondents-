@@ -7,4 +7,11 @@ export type RunConfig = {
 /**
  * Seeds option shuffling; defaults to the cohort's seed.
  */
-seed: number | null, };
+seed: number | null, 
+/**
+ * Distribution mode (SPEC §8, BACKLOG B23): record each option's probability for
+ * single-choice questions, from an extra logprobs-enabled call per question and
+ * respondent. Off by default; the UI hides the toggle when the model doesn't support it
+ * (`probe_logprobs`).
+ */
+logprobs: boolean, };

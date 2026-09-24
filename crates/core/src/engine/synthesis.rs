@@ -153,6 +153,7 @@ async fn inner(
         schema: synthesis_schema(),
         temperature: 0.4,
         max_output_tokens: 8_192,
+        logprobs: false,
     };
     let log = |attempt: u32, r: &Result<StructuredResponse, LlmError>| {
         log_call(writer, job.run_id, "synthesis", attempt, r)
@@ -258,6 +259,7 @@ pub fn theme_request(model: &str, question: &str, answers: &[(i64, String)]) -> 
         schema: theme_schema(),
         temperature: 0.2,
         max_output_tokens: 16_384,
+        logprobs: false,
     }
 }
 

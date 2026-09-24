@@ -128,6 +128,7 @@ pub fn build_request(model: &str, brief: &DraftBrief) -> StructuredRequest {
         schema: reply_schema(),
         temperature: 0.7,
         max_output_tokens: 16_384,
+        logprobs: false,
     }
 }
 

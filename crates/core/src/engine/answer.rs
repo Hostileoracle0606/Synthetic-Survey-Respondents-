@@ -185,7 +185,90 @@ pub fn build_request(
         schema: reply_schema(questions),
         temperature: TEMPERATURE,
         max_output_tokens: 8_192,
+        logprobs: false,
     }
+}
+
+/// Distribution mode (docs/SPEC.md §8, BACKLOG B23): one question, one call, so the output has
+/// few enough tokens that the one encoding the chosen option can be told apart from the rest.
+/// Only single-choice questions are supported; a multi-choice answer is several independent
+/// yes/no picks, not one categorical distribution.
+pub fn build_single_question_request(
+    model: &str,
+    question: &Question,
+    shown: &[String],
+    persona: &str,
+) -> StructuredRequest {
+    let mut prompt = String::from("Survey\n\n");
+    prompt.push_str(&describe(question, shown));
+    prompt.push_str("\nAbout you\n");
+    prompt.push_str(persona);
+    StructuredRequest {
+        model: model.to_string(),
+        system: SYSTEM.to_string(),
+        prompt,
+        schema: reply_schema(&[(question, shown.to_vec())]),
+        temperature: TEMPERATURE,
+        max_output_tokens: 256,
+        logprobs: true,
+    }
+}
+
+/// Turns a raw `logprobsResult` (Google's documented shape: `topCandidates`, one entry per
+/// output token, each holding that position's top alternates) into a probability per shown
+/// option, for a single-choice question's `"choice"` field (an integer from 1 to
+/// `shown.len()`). Finds the output token position whose top alternates are mostly small
+/// integers in that range — the digit answering `"choice"` — since `build_single_question_request`
+/// asks for exactly one question, so no other output token is likely to look like that.
+/// `None` when no such position is found (never requested, or the model didn't return one).
+///
+/// Only options whose token appears among the requested top alternates get a share of the
+/// mass; a model whose true second-choice options fall outside that list are not counted.
+pub fn option_probabilities(
+    logprobs: &Value,
+    shown: &[String],
+) -> Option<std::collections::BTreeMap<String, f64>> {
+    let positions = logprobs["topCandidates"].as_array()?;
+    let n = shown.len() as i64;
+    let best = positions.iter().max_by_key(|pos| {
+        pos["candidates"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|c| {
+                c["token"]
+                    .as_str()
+                    .and_then(|t| t.trim().parse::<i64>().ok())
+                    .is_some_and(|v| (1..=n).contains(&v))
+            })
+            .count()
+    })?;
+    let candidates = best["candidates"].as_array()?;
+    let mut by_index: std::collections::BTreeMap<usize, f64> = std::collections::BTreeMap::new();
+    for c in candidates {
+        let Some(i) = c["token"]
+            .as_str()
+            .and_then(|t| t.trim().parse::<i64>().ok())
+            .filter(|v| (1..=n).contains(v))
+            .map(|v| v as usize - 1)
+        else {
+            continue;
+        };
+        let Some(lp) = c["logProbability"].as_f64() else {
+            continue;
+        };
+        *by_index.entry(i).or_insert(0.0) += lp.exp();
+    }
+    if by_index.is_empty() {
+        return None;
+    }
+    let total: f64 = by_index.values().sum();
+    Some(
+        by_index
+            .into_iter()
+            .map(|(i, p)| (shown[i].clone(), p / total))
+            .collect(),
+    )
 }
 
 /// A checked answer, ready to store.
@@ -588,5 +671,69 @@ mod tests {
         assert!(check_reply(&pairs, &reply_for_prompt(&r.prompt))
             .iter()
             .all(Result::is_ok));
+    }
+
+    #[test]
+    fn single_question_request_asks_for_logprobs_and_only_this_question() {
+        let question = q(1, "Q1", QuestionType::SingleChoice);
+        let shown = shown_order(&question, 3, 9);
+        let req = build_single_question_request("m", &question, &shown, "Name: Pat\n");
+        assert!(req.logprobs);
+        assert!(req.prompt.contains("[Q1]"));
+        assert!(!req.prompt.contains("SECRET OBJECTIVE"));
+        assert_eq!(req.schema["required"], json!(["Q1"]));
+    }
+
+    /// Google's documented `logprobsResult` shape: one entry per output token, each with its
+    /// own top alternates. A compact `{"choice":N,"reason":"…"}` reply puts the digit for
+    /// `choice` in one token position; the "reason" text's tokens rarely all look like small
+    /// integers, so the heuristic (most integer-shaped alternates) finds the right position.
+    fn logprobs_result(chosen_index: usize, mass: &[(&str, f64)]) -> Value {
+        let candidates: Vec<Value> = mass
+            .iter()
+            .map(|(tok, p)| json!({ "token": tok, "logProbability": p.ln() }))
+            .collect();
+        json!({
+            "topCandidates": [
+                // A position that looks nothing like the answer (part of "reason"'s text).
+                { "candidates": [ { "token": "The", "logProbability": -0.05 } ] },
+                { "candidates": candidates }
+            ],
+            "chosenCandidates": [
+                { "token": "The", "logProbability": -0.05 },
+                { "token": mass[chosen_index].0, "logProbability": mass[chosen_index].1.ln() }
+            ]
+        })
+    }
+
+    #[test]
+    fn option_probabilities_reads_the_integer_shaped_token_position() {
+        let shown = vec!["A".into(), "B".into(), "C".into(), "D".into()];
+        let lp = logprobs_result(1, &[("1", 0.1), ("2", 0.7), ("3", 0.15), ("4", 0.05)]);
+        let probs = option_probabilities(&lp, &shown).unwrap();
+        assert!((probs["B"] - 0.7).abs() < 1e-9, "{probs:?}");
+        assert!((probs.values().sum::<f64>() - 1.0).abs() < 1e-9);
+        assert_eq!(probs.len(), 4);
+    }
+
+    #[test]
+    fn option_probabilities_renormalises_over_the_alternates_it_actually_saw() {
+        // Only 2 of 4 options showed up in the top alternates: the mass still sums to 1.
+        let shown = vec!["A".into(), "B".into(), "C".into(), "D".into()];
+        let lp = logprobs_result(0, &[("1", 0.8), ("2", 0.2)]);
+        let probs = option_probabilities(&lp, &shown).unwrap();
+        assert_eq!(probs.len(), 2);
+        assert!((probs.values().sum::<f64>() - 1.0).abs() < 1e-9);
+        assert!(probs["A"] > probs["B"]);
+    }
+
+    #[test]
+    fn option_probabilities_is_none_without_logprobs() {
+        assert!(option_probabilities(&json!({}), &["A".into(), "B".into()]).is_none());
+        assert!(option_probabilities(
+            &json!({"topCandidates": [{"candidates": [{"token": "the", "logProbability": -0.1}]}]}),
+            &["A".into(), "B".into()]
+        )
+        .is_none());
     }
 }

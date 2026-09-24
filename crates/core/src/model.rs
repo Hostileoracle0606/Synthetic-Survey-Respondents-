@@ -542,6 +542,12 @@ pub struct RunConfig {
     /// Seeds option shuffling; defaults to the cohort's seed.
     #[ts(type = "number | null")]
     pub seed: Option<u64>,
+    /// Distribution mode (SPEC §8, BACKLOG B23): record each option's probability for
+    /// single-choice questions, from an extra logprobs-enabled call per question and
+    /// respondent. Off by default; the UI hides the toggle when the model doesn't support it
+    /// (`probe_logprobs`).
+    #[serde(default)]
+    pub logprobs: bool,
 }
 
 /// Shown before Run Survey Simulation (SPEC §5 "Cost estimate").

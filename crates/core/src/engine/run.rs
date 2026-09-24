@@ -21,7 +21,8 @@ use crate::db::writer::Writer;
 use crate::error::AppResult;
 use crate::llm::{LlmError, LlmProvider, StructuredRequest, Usage};
 use crate::model::{
-    AnswerDelta, ConsoleLine, EventLevel, ModelPrice, Question, RunProgress, RunStatus,
+    AnswerDelta, ConsoleLine, EventLevel, ModelPrice, Question, QuestionType, RunProgress,
+    RunStatus,
 };
 use crate::pricing;
 
@@ -257,6 +258,19 @@ async fn respondent(ctx: &Ctx, r: &PlannedRespondent) -> Result<(), Halt> {
         }
     }
 
+    // Distribution mode (BACKLOG B23): collected before `results` is consumed below, and
+    // probed after the respondent's answers are safely saved.
+    let single_choice_valid: Vec<(&Question, Vec<String>)> = if ctx.plan.logprobs {
+        pairs
+            .iter()
+            .zip(results.iter())
+            .filter(|((q, _), res)| q.body.question_type == QuestionType::SingleChoice && res.is_ok())
+            .map(|((q, shown), _)| (*q, shown.clone()))
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     let mut answers = Vec::new();
     let mut deltas = Vec::new();
     let mut console = Vec::new();
@@ -301,7 +315,46 @@ async fn respondent(ctx: &Ctx, r: &PlannedRespondent) -> Result<(), Halt> {
             outcome,
         });
     }
-    save(ctx, r, call, extra, answers, deltas, console).await
+    let outcome = save(ctx, r, call, extra, answers, deltas, console).await;
+    if outcome.is_ok() {
+        probe_distribution(ctx, r, &single_choice_valid).await;
+    }
+    outcome
+}
+
+/// Distribution mode (docs/SPEC.md §8, BACKLOG B23): one extra logprobs-enabled call per
+/// single-choice question this respondent answered validly, to record `option_probs_json`.
+/// Best-effort: a failed, blocked or unsupported probe is silently skipped rather than
+/// retried or turned into a `Halt`, since this is advisory and off by default. Its calls still
+/// go through the run's rate limiter, but are not currently reflected in `estimate_run`'s
+/// pre-run cost estimate (a known gap, not a bug: BACKLOG B23).
+async fn probe_distribution(ctx: &Ctx, r: &PlannedRespondent, targets: &[(&Question, Vec<String>)]) {
+    for (q, shown) in targets {
+        let req = answer::build_single_question_request(&ctx.plan.model, q, shown, &r.persona);
+        let estimate = ((req.system.len() + req.prompt.len()) / 4) as u32;
+        let Ok(permit) = ctx.limiter.acquire(estimate).await else {
+            continue;
+        };
+        let Ok(resp) = ctx.llm.complete_structured(&req).await else {
+            drop(permit);
+            continue;
+        };
+        ctx.limiter.record_actual(&permit, resp.usage.input_tokens).await;
+        let Some(probs) = resp
+            .logprobs
+            .as_ref()
+            .and_then(|lp| answer::option_probabilities(lp, shown))
+        else {
+            continue;
+        };
+        let (run_id, respondent_id, question_id) = (ctx.plan.run_id, r.id, q.id);
+        let _ = ctx
+            .writer
+            .write(Box::new(move |c| {
+                runs::save_option_probs(c, run_id, question_id, respondent_id, &probs)
+            }))
+            .await;
+    }
 }
 
 fn add_usage(a: Usage, b: Usage) -> Usage {
@@ -727,7 +780,13 @@ mod tests {
     }
 
     fn start(e: &Env, conc: u32) -> i64 {
-        runs::start(&e.conn(), 1, &RunConfig { seed: None }, &settings(conc))
+        runs::start(&e.conn(), 1, &RunConfig { seed: None, logprobs: false }, &settings(conc))
+            .unwrap()
+            .id
+    }
+
+    fn start_with_logprobs(e: &Env, conc: u32) -> i64 {
+        runs::start(&e.conn(), 1, &RunConfig { seed: None, logprobs: true }, &settings(conc))
             .unwrap()
             .id
     }
@@ -741,7 +800,7 @@ mod tests {
             [],
         )
         .unwrap();
-        let err = runs::start(&conn, 1, &RunConfig { seed: None }, &settings(4))
+        let err = runs::start(&conn, 1, &RunConfig { seed: None, logprobs: false }, &settings(4))
             .err()
             .unwrap();
         assert_eq!(err.code, ErrorCode::SurveyNotApproved);
@@ -766,7 +825,7 @@ mod tests {
             requests_left_today: 5,
             est_cost_usd: Some(0.5),
         };
-        let err = runs::start(&e.conn(), 1, &RunConfig { seed: None }, &s)
+        let err = runs::start(&e.conn(), 1, &RunConfig { seed: None, logprobs: false }, &s)
             .err()
             .unwrap();
         assert!(
@@ -961,7 +1020,7 @@ mod tests {
         assert!(stopped_at < 90);
         assert_eq!(runs::get(&e.conn(), id).unwrap().status, RunStatus::Stopped);
         // A stopped run can't be restarted by accident: a new run is needed.
-        assert!(runs::start(&e.conn(), 1, &RunConfig { seed: None }, &settings(3)).is_ok());
+        assert!(runs::start(&e.conn(), 1, &RunConfig { seed: None, logprobs: false }, &settings(3)).is_ok());
     }
 
     #[tokio::test]
@@ -1019,7 +1078,7 @@ mod tests {
             est_cost_usd: before.cost_usd,
             ..settings(2)
         };
-        let id = runs::start(&e.conn(), 1, &RunConfig { seed: None }, &s)
+        let id = runs::start(&e.conn(), 1, &RunConfig { seed: None, logprobs: false }, &s)
             .unwrap()
             .id;
         // Leaves out Q2 every time, so each respondent costs two calls.
@@ -1133,6 +1192,61 @@ mod tests {
         );
         // Shuffling spread the chosen options, so variance alone looks healthy.
         assert!(v.entropy.unwrap() > 0.8);
+    }
+
+    /// BACKLOG B23: distribution mode records `option_probs_json` on single-choice answers
+    /// only when the run asked for it, from an extra logprobs-enabled call per question.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn distribution_mode_records_option_probs_only_when_the_run_asks_for_it() {
+        use serde_json::json;
+        let probs = |req: &StructuredRequest| {
+            req.logprobs.then(|| {
+                json!({ "topCandidates": [{ "candidates": [
+                    { "token": "1", "logProbability": 0.5f64.ln() },
+                    { "token": "2", "logProbability": 0.3f64.ln() },
+                    { "token": "3", "logProbability": 0.15f64.ln() },
+                    { "token": "4", "logProbability": 0.05f64.ln() }
+                ]}] })
+            })
+        };
+        let llm = good().with_logprobs(probs);
+
+        // Off by default: no extra calls, no probabilities stored.
+        let e = env(5, 1);
+        let id = start(&e, 3);
+        let (_tx, rx) = watch::channel(Mode::Run);
+        go(&e, id, &llm, 3, rx).await;
+        let stored: Vec<Option<String>> = e
+            .conn()
+            .prepare("SELECT option_probs_json FROM responses WHERE run_id = ?1")
+            .unwrap()
+            .query_map([id], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(stored.len(), 5);
+        assert!(stored.iter().all(Option::is_none));
+
+        // On: every single-choice answer gets a probability distribution that sums to 1.
+        let e2 = env(5, 1);
+        let id2 = start_with_logprobs(&e2, 3);
+        let (_tx, rx) = watch::channel(Mode::Run);
+        go(&e2, id2, &llm, 3, rx).await;
+        let stored2: Vec<String> = e2
+            .conn()
+            .prepare("SELECT option_probs_json FROM responses WHERE run_id = ?1")
+            .unwrap()
+            .query_map([id2], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(stored2.len(), 5);
+        for raw in stored2 {
+            let probs: std::collections::BTreeMap<String, f64> =
+                serde_json::from_str(&raw).unwrap();
+            assert_eq!(probs.len(), 4, "{probs:?}");
+            assert!((probs.values().sum::<f64>() - 1.0).abs() < 1e-9, "{probs:?}");
+        }
     }
 
     /// Review fixes: a paused run can't resume on an edited survey; a question with answers

@@ -58,6 +58,7 @@ async fn live_structured_output() {
         }),
         temperature: 1.0,
         max_output_tokens: 1024,
+        logprobs: false,
     };
     let resp = c
         .complete_structured(&req)

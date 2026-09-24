@@ -36,6 +36,7 @@ static SCHEMA_BODY: LazyLock<String> = LazyLock::new(|| {
 const LATER: &[&str] = &[
     include_str!("../../../../docs/migrations/002_survey_text_edited.sql"),
     include_str!("../../../../docs/migrations/003_question_critique.sql"),
+    include_str!("../../../../docs/migrations/004_run_logprobs.sql"),
 ];
 
 pub fn migrations() -> Migrations<'static> {

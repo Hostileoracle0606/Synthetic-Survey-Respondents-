@@ -12,10 +12,12 @@ use serde_json::Value;
 use super::{Capabilities, LlmError, LlmProvider, StructuredRequest, StructuredResponse, Usage};
 
 type Responder = dyn Fn(&StructuredRequest, usize) -> Result<Value, LlmError> + Send + Sync;
+type LogprobsResponder = dyn Fn(&StructuredRequest) -> Option<Value> + Send + Sync;
 
 #[derive(Clone)]
 pub struct ScriptedLlm {
     responder: Arc<Responder>,
+    logprobs: Arc<LogprobsResponder>,
     delay: Duration,
     calls: Arc<AtomicUsize>,
     in_flight: Arc<AtomicUsize>,
@@ -31,6 +33,7 @@ impl ScriptedLlm {
     ) -> Self {
         Self {
             responder: Arc::new(responder),
+            logprobs: Arc::new(|_| None),
             delay: Duration::ZERO,
             calls: Arc::default(),
             in_flight: Arc::default(),
@@ -42,6 +45,16 @@ impl ScriptedLlm {
 
     pub fn with_delay(mut self, delay: Duration) -> Self {
         self.delay = delay;
+        self
+    }
+
+    /// Distribution mode tests (BACKLOG B23): supply a `logprobsResult` for requests that ask
+    /// for one, without changing the answer JSON every other test relies on.
+    pub fn with_logprobs(
+        mut self,
+        f: impl Fn(&StructuredRequest) -> Option<Value> + Send + Sync + 'static,
+    ) -> Self {
+        self.logprobs = Arc::new(f);
         self
     }
 
@@ -91,6 +104,7 @@ impl LlmProvider for ScriptedLlm {
             json,
             usage,
             latency_ms: self.delay.as_millis() as u64,
+            logprobs: (self.logprobs)(req),
         })
     }
 

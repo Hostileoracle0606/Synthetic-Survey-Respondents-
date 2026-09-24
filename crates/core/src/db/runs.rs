@@ -69,8 +69,8 @@ pub fn start(
     )?;
     tx.execute(
         "INSERT INTO simulation_runs(project_id, survey_id, cohort_id, survey_hash, provider, model, temperature,
-            answer_mode, prompt_version, seed, max_concurrency, status, est_cost_usd)
-         VALUES (?1, ?2, ?3, ?4, 'gemini', ?5, ?6, 'whole_survey', ?7, ?8, ?9, 'queued', ?10)",
+            answer_mode, prompt_version, seed, max_concurrency, status, est_cost_usd, logprobs)
+         VALUES (?1, ?2, ?3, ?4, 'gemini', ?5, ?6, 'whole_survey', ?7, ?8, ?9, 'queued', ?10, ?11)",
         params![
             project_id,
             survey.id,
@@ -81,7 +81,8 @@ pub fn start(
             answer::PROMPT_VERSION,
             seed as i64,
             s.max_concurrency,
-            s.est_cost_usd
+            s.est_cost_usd,
+            config.logprobs
         ],
     )?;
     let id = tx.last_insert_rowid();
@@ -300,6 +301,8 @@ pub struct RunPlan {
     pub model: String,
     pub seed: u64,
     pub max_concurrency: u32,
+    /// Distribution mode (BACKLOG B23): probe single-choice answers for option probabilities.
+    pub logprobs: bool,
     pub intro: String,
     pub questions: Vec<Question>,
     pub todo: Vec<PlannedRespondent>,
@@ -315,10 +318,10 @@ pub struct RunPlan {
 
 pub fn plan(conn: &Connection, run_id: i64) -> AppResult<RunPlan> {
     let run = get(conn, run_id)?;
-    let (model, seed, max_concurrency): (String, i64, u32) = conn.query_row(
-        "SELECT model, seed, max_concurrency FROM simulation_runs WHERE id = ?1",
+    let (model, seed, max_concurrency, logprobs): (String, i64, u32, bool) = conn.query_row(
+        "SELECT model, seed, max_concurrency, logprobs FROM simulation_runs WHERE id = ?1",
         [run_id],
-        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
     )?;
     let survey = surveys::get(conn, run.survey_id)?;
     // Everyone in a run answers the survey that was approved when it started.
@@ -357,6 +360,7 @@ pub fn plan(conn: &Connection, run_id: i64) -> AppResult<RunPlan> {
         model,
         seed: seed as u64,
         max_concurrency,
+        logprobs,
         intro: survey.intro,
         questions: survey.questions,
         todo,
@@ -433,5 +437,23 @@ pub fn save_respondent(
             status
         ])?;
     }
+    Ok(())
+}
+
+/// Distribution mode (BACKLOG B23): records one question's per-option probabilities for a
+/// respondent who already has a valid answer to it in this run. A no-op if that response row
+/// doesn't exist (e.g. the answer was invalid or refused), so a failed probe never invents one.
+pub fn save_option_probs(
+    conn: &Connection,
+    run_id: i64,
+    question_id: i64,
+    respondent_id: i64,
+    probs: &std::collections::BTreeMap<String, f64>,
+) -> AppResult<()> {
+    conn.execute(
+        "UPDATE responses SET option_probs_json = ?1
+         WHERE run_id = ?2 AND question_id = ?3 AND respondent_id = ?4 AND status = 'valid'",
+        params![serde_json::to_string(probs)?, run_id, question_id, respondent_id],
+    )?;
     Ok(())
 }
