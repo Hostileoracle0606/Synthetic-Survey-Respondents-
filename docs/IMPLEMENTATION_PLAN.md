@@ -131,7 +131,7 @@ Exit criteria:
   - Kill and relaunch with no duplicate or lost answers: done.
   - Forced 30% 429s complete with reduced concurrency: done.
   - Same seed gives the same option orders: done.
-  - 60 fps and memory with 1,000 respondents: not yet. It needs the M5 Windows VMs (B14).
+  - 60 fps and memory with 1,000 respondents: measured on `windows-latest` by the release `perf` job. Frame rate passes (100% of frames on time). Memory is over budget: app 57 MB (≤ 50), WebView2 renderer 170 MB (≤ 100) (B14).
   - No API key in the database, logs or exports: not yet. It waits for exports in M4 (B15).
 
 ## M4 — Report: Step 5 (about 1.5 weeks)
