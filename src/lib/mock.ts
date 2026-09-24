@@ -14,6 +14,7 @@ import type { QuestionReport } from "../types/gen/QuestionReport";
 import type { Report } from "../types/gen/Report";
 import type { QuestionBody } from "../types/gen/QuestionBody";
 import type { RunProgress } from "../types/gen/RunProgress";
+import type { Settings } from "../types/gen/Settings";
 import type { SimulationRun } from "../types/gen/SimulationRun";
 import type { Survey } from "../types/gen/Survey";
 import type { SurveyInfo } from "../types/gen/SurveyInfo";
@@ -26,6 +27,7 @@ const BIASES = [["Status quo", "Price anchoring"], ["Brand-loyal", "Social proof
 let project: Project | null = null;
 let cohort: Cohort | null = null;
 let people: RespondentDetail[] = [];
+let settings: Settings = { flashModel: null, proModel: null, usageTier: "free", flashPrice: null, proPrice: null };
 
 function person(i: number): RespondentDetail {
   const name = `${FIRST[i % 12]} ${LAST[(i * 5) % 12]}`;
@@ -212,6 +214,11 @@ export const mock = {
     return project;
   },
   getLastProject: async (): Promise<Project | null> => project,
+  getSettings: async (): Promise<Settings> => settings,
+  saveSettings: async (s: Settings): Promise<Settings> => {
+    settings = s;
+    return settings;
+  },
   generateCohort: async (_projectId: number, config: CohortConfig, onProgress: (p: CohortProgress) => void) =>
     start(config, onProgress, 1),
   regenerateCohort: async (cohortId: number, onProgress: (p: CohortProgress) => void) =>

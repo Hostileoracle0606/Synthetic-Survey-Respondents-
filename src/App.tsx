@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./lib/api";
 import { useWizard } from "./store/wizard";
 import type { StepIndex } from "./store/wizard";
-import { KeyPrompt } from "./components/KeyPrompt";
+import { SettingsScreen } from "./components/SettingsScreen";
 import { SurveyInfoStep } from "./features/survey-info/SurveyInfoStep";
 import { PersonasStep } from "./features/personas/PersonasStep";
 import { QuestionnaireStep } from "./features/questionnaire/QuestionnaireStep";
@@ -42,7 +42,7 @@ export default function App() {
   return (
     <>
       <Screen />
-      {needsKey && <KeyPrompt onDone={() => setNeedsKey(false)} />}
+      {needsKey && <SettingsScreen onClose={() => setNeedsKey(false)} />}
     </>
   );
 }

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::State;
 
-use survey_core::db::{cohorts, projects, runs, surveys};
+use survey_core::db::{cohorts, projects, runs, settings as settings_db, surveys};
 use survey_core::engine::cohort::{self, CohortJob};
 use survey_core::engine::draft::{self, DraftBrief, DraftJob};
 use survey_core::engine::persona::PROMPT_VERSION;
@@ -17,7 +17,7 @@ use survey_core::llm::LlmProvider;
 use survey_core::model::{
     Cohort, CohortConfig, CohortProgress, CohortSummary, CountryOption, CrossTab, DraftStatus,
     ExportFormat, Project, Question, QuestionBody, QuotaGroup, Report, RespondentDetail,
-    RespondentPage, RunConfig, RunProgress, RunStatus, SimulationRun, Survey, SurveyInfo,
+    RespondentPage, RunConfig, RunProgress, RunStatus, Settings, SimulationRun, Survey, SurveyInfo,
     SynthesisStatus,
 };
 use survey_core::report::{self, export};
@@ -49,8 +49,11 @@ async fn models(state: &State<'_, AppState>, client: &GeminiClient) -> AppResult
     Ok(list)
 }
 
-/// Newest stable Flash: personas and answering.
+/// Newest stable Flash: personas and answering. Settings (BACKLOG B1) can override the pick.
 async fn flash_model(state: &State<'_, AppState>, client: &GeminiClient) -> AppResult<String> {
+    if let Some(m) = settings_db::get(&*lock(state)?)?.flash_model {
+        return Ok(m);
+    }
     newest_stable(&models(state, client).await?, "flash").ok_or_else(|| {
         AppError::new(
             ErrorCode::Llm,
@@ -60,13 +63,29 @@ async fn flash_model(state: &State<'_, AppState>, client: &GeminiClient) -> AppR
 }
 
 /// Drafting, theme coding and synthesis: newest stable Pro, unless Flash is a newer generation.
+/// Settings (BACKLOG B1) can override the pick.
 async fn draft_model(state: &State<'_, AppState>, client: &GeminiClient) -> AppResult<String> {
+    if let Some(m) = settings_db::get(&*lock(state)?)?.pro_model {
+        return Ok(m);
+    }
     drafting_model(&models(state, client).await?).ok_or_else(|| {
         AppError::new(
             ErrorCode::Llm,
             "no stable Gemini model is available to this key",
         )
     })
+}
+
+#[tauri::command]
+pub fn get_settings(state: State<'_, AppState>) -> AppResult<Settings> {
+    settings_db::get(&*lock(&state)?)
+}
+
+/// Saves Settings (BACKLOG B1). The usage tier's new rate limits take effect on next launch;
+/// a model override or price takes effect on the next Gemini call or run.
+#[tauri::command]
+pub fn save_settings(state: State<'_, AppState>, settings: Settings) -> AppResult<Settings> {
+    settings_db::save(&*lock(&state)?, &settings)
 }
 
 #[tauri::command]

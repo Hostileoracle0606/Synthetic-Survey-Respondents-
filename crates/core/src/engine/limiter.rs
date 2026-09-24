@@ -11,6 +11,7 @@ use tokio::sync::{Mutex, Notify, OwnedSemaphorePermit, Semaphore};
 use tokio::time::Instant;
 
 use crate::error::{AppError, AppResult, ErrorCode};
+use crate::model::UsageTier;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Limits {
@@ -23,11 +24,40 @@ pub struct Limits {
 impl Default for Limits {
     /// Conservative until the user's Gemini usage tier is known (BACKLOG B1).
     fn default() -> Self {
-        Self {
-            requests_per_minute: 60,
-            tokens_per_minute: 1_000_000,
-            requests_per_day: 1_000,
-            max_concurrency: 4,
+        Self::for_tier(UsageTier::Free)
+    }
+}
+
+impl Limits {
+    /// Published Gemini API RPM/TPM/RPD per tier (Free through Tier 3); concurrency is our own
+    /// conservative choice, not part of Gemini's published limits. Settings (BACKLOG B1) lets
+    /// the user pick the tier their Google Cloud project is actually on.
+    pub fn for_tier(tier: UsageTier) -> Self {
+        match tier {
+            UsageTier::Free => Self {
+                requests_per_minute: 60,
+                tokens_per_minute: 1_000_000,
+                requests_per_day: 1_000,
+                max_concurrency: 4,
+            },
+            UsageTier::Tier1 => Self {
+                requests_per_minute: 360,
+                tokens_per_minute: 4_000_000,
+                requests_per_day: 10_000,
+                max_concurrency: 8,
+            },
+            UsageTier::Tier2 => Self {
+                requests_per_minute: 1_000,
+                tokens_per_minute: 8_000_000,
+                requests_per_day: 100_000,
+                max_concurrency: 16,
+            },
+            UsageTier::Tier3 => Self {
+                requests_per_minute: 2_000,
+                tokens_per_minute: 30_000_000,
+                requests_per_day: 1_000_000,
+                max_concurrency: 32,
+            },
         }
     }
 }

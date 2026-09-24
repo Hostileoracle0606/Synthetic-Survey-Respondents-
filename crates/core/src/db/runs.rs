@@ -2,11 +2,13 @@
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::db::{cohorts, surveys};
+use crate::db::{cohorts, settings, surveys};
 use crate::engine::answer::{self, Checked};
 use crate::error::{AppError, AppResult};
 use crate::llm::Usage;
-use crate::model::{CohortStatus, Question, RespondentDetail, RunConfig, RunStatus, SimulationRun};
+use crate::model::{
+    CohortStatus, ModelPrice, Question, RespondentDetail, RunConfig, RunStatus, SimulationRun,
+};
 
 /// Everything fixed when a run starts.
 pub struct RunSettings<'a> {
@@ -204,6 +206,9 @@ pub struct RunPlan {
     pub respondents_total: u32,
     pub respondents_done: u32,
     pub answered: u32,
+    /// The saved Flash price (BACKLOG B1), if any: every simulation run answers with Flash. The
+    /// live cost estimate stays "$—" until the user fills in Settings.
+    pub price: Option<ModelPrice>,
 }
 
 pub fn plan(conn: &Connection, run_id: i64) -> AppResult<RunPlan> {
@@ -256,6 +261,7 @@ pub fn plan(conn: &Connection, run_id: i64) -> AppResult<RunPlan> {
         respondents_total: run.respondents,
         respondents_done: run.respondents_done,
         answered: run.answered,
+        price: settings::get(conn)?.flash_price,
     })
 }
 

@@ -24,6 +24,7 @@ import type { Report } from "../types/gen/Report";
 import type { QuestionBody } from "../types/gen/QuestionBody";
 import type { RunConfig } from "../types/gen/RunConfig";
 import type { RunProgress } from "../types/gen/RunProgress";
+import type { Settings } from "../types/gen/Settings";
 import type { SimulationRun } from "../types/gen/SimulationRun";
 import type { Survey } from "../types/gen/Survey";
 import type { SurveyInfo } from "../types/gen/SurveyInfo";
@@ -108,5 +109,9 @@ export const api = {
     inTauri ? invoke("export_run", { runId, format }) : mock.exportRun(format),
   hasApiKey: (): Promise<boolean> => (inTauri ? invoke("has_api_key") : Promise.resolve(true)),
   setApiKey: (key: string): Promise<void> => (inTauri ? invoke("set_api_key", { key }) : Promise.resolve()),
+  deleteApiKey: (): Promise<void> => (inTauri ? invoke("delete_api_key") : Promise.resolve()),
   testConnection: (): Promise<string[]> => (inTauri ? invoke("test_connection") : Promise.resolve(["gemini-mock-flash"])),
+  getSettings: (): Promise<Settings> => (inTauri ? invoke("get_settings") : mock.getSettings()),
+  saveSettings: (settings: Settings): Promise<Settings> =>
+    inTauri ? invoke("save_settings", { settings }) : mock.saveSettings(settings),
 };
