@@ -446,6 +446,50 @@ pub struct Question {
     /// What the question is for (from the draft); shown to the reviewer, never to respondents.
     pub objective: Option<String>,
     pub rationale: Option<String>,
+    /// The critic's check of the current wording; None until one has been asked for (a
+    /// person's new question is checked when first saved). Advice only: never blocks approval.
+    pub critique: Option<Critique>,
+}
+
+/// Wording problems the critic looks for (docs/DATA_FLOW.md §3, Step 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CriticIssue {
+    Leading,
+    DoubleBarrelled,
+    Unclear,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CriticFlag {
+    pub issue: CriticIssue,
+    /// What is wrong and how to fix it, in a sentence or two.
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CriticStatus {
+    Checking,
+    Done,
+    Failed,
+}
+
+/// Stored with the question (`questions.critic_json`) and cleared when its wording changes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Critique {
+    pub status: CriticStatus,
+    pub flags: Vec<CriticFlag>,
+    /// Why the check failed, when it did.
+    pub error: Option<String>,
+    /// Prompt version that produced the flags, e.g. "critic.v1".
+    pub prompt_version: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -500,6 +544,25 @@ pub struct RunConfig {
     pub seed: Option<u64>,
 }
 
+/// Shown before Run Survey Simulation (SPEC §5 "Cost estimate").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CostEstimate {
+    /// The answering model the run would use.
+    pub model: String,
+    /// One whole-survey call per respondent.
+    pub calls: u32,
+    #[ts(type = "number")]
+    pub input_tokens: u64,
+    #[ts(type = "number")]
+    pub output_tokens: u64,
+    /// None until a Flash price is saved in Settings.
+    pub cost_usd: Option<f64>,
+    /// True when output tokens come from earlier runs on this model rather than a rule of thumb.
+    pub output_from_history: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -524,6 +587,10 @@ pub struct SimulationRun {
     /// Why the run paused or failed, e.g. an invalid key.
     pub error: Option<String>,
     pub created_at: String,
+    /// Estimated when the run started; None without a saved Flash price.
+    pub est_cost_usd: Option<f64>,
+    /// Actual cost of the run's calls so far, from their token counts.
+    pub cost_usd: Option<f64>,
 }
 
 impl RunStatus {
@@ -782,6 +849,10 @@ impl UsageTier {
 pub struct ModelPrice {
     pub input_usd_per_million: f64,
     pub output_usd_per_million: f64,
+    /// Input tokens served from Gemini's implicit cache, usually a tenth of the input price.
+    /// None charges them at the full input price, so the cost is never understated.
+    #[serde(default)]
+    pub cached_input_usd_per_million: Option<f64>,
 }
 
 /// Settings screen (BACKLOG B1): everything but the API key itself, which stays in the OS

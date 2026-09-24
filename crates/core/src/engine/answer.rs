@@ -429,6 +429,15 @@ mod tests {
             review_status: ReviewStatus::Accepted,
             objective: Some("SECRET OBJECTIVE".into()),
             rationale: Some("SECRET RATIONALE".into()),
+            critique: Some(crate::model::Critique {
+                status: crate::model::CriticStatus::Done,
+                flags: vec![crate::model::CriticFlag {
+                    issue: crate::model::CriticIssue::Leading,
+                    note: "SECRET CRITIC NOTE".into(),
+                }],
+                error: None,
+                prompt_version: "critic.v1".into(),
+            }),
         }
     }
 

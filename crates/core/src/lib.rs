@@ -10,6 +10,7 @@ pub mod error;
 pub mod fidelity;
 pub mod llm;
 pub mod model;
+pub mod pricing;
 pub mod report;
 pub mod sampling;
 

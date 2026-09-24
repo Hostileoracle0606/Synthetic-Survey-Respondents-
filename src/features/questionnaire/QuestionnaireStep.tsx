@@ -2,12 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { useWizard } from "../../store/wizard";
 import { useRun } from "../../store/run";
+import type { CriticIssue } from "../../types/gen/CriticIssue";
+import type { Critique } from "../../types/gen/Critique";
 import type { Question } from "../../types/gen/Question";
 import type { QuestionBody } from "../../types/gen/QuestionBody";
 import type { QuestionType } from "../../types/gen/QuestionType";
 import type { Survey } from "../../types/gen/Survey";
 import { AppShell } from "../../components/AppShell";
 import { Arrow, pillButton, primaryButton } from "../../components/fields";
+import { moveBefore, sameOrder } from "../../lib/reorder";
+import { tokens, usd } from "../../lib/cost";
+import type { CostEstimate } from "../../types/gen/CostEstimate";
 
 const TYPES: [QuestionType, string][] = [
   ["single_choice", "Single choice"],
@@ -17,6 +22,51 @@ const TYPES: [QuestionType, string][] = [
   ["open_ended", "Open answer"],
 ];
 const typeLabel = (t: QuestionType) => TYPES.find(([k]) => k === t)?.[1] ?? t;
+const ISSUES: Record<CriticIssue, string> = { leading: "Leading", double_barrelled: "Double-barrelled", unclear: "Unclear" };
+
+/** One line for a question card: what the critic found, or that it is still checking. */
+function critiqueSummary(c: Critique | null): { text: string; warn: boolean } | null {
+  if (!c) return null;
+  if (c.status === "checking") return { text: "Checking wording…", warn: false };
+  if (c.status === "failed") return { text: "Wording check failed", warn: false };
+  if (c.flags.length === 0) return null;
+  return { text: `⚑ ${c.flags.map((f) => ISSUES[f.issue]).join(", ")}`, warn: true };
+}
+
+/** The critic's flags on the selected question. Advice only: approval never waits on it. */
+function CritiquePanel({ critique, busy, onCheck }: { critique: Critique | null; busy: boolean; onCheck: () => void }) {
+  const again = <button type="button" className={`${smallButton} h-8 shrink-0`} onClick={onCheck} disabled={busy}>Check again</button>;
+  if (!critique) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-muted">
+        <span>The wording is checked by Gemini when you save the question.</span>
+        {again}
+      </div>
+    );
+  }
+  if (critique.status === "checking") {
+    return <p className="m-0 rounded-2xl border border-line px-4 py-3 text-sm text-muted" role="status">Gemini is checking the wording for leading, double-barrelled or unclear questions…</p>;
+  }
+  if (critique.status === "failed") {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-muted">
+        <span>The wording check didn't finish{critique.error ? `: ${critique.error}` : ""}.</span>
+        {again}
+      </div>
+    );
+  }
+  if (critique.flags.length === 0) {
+    return <p className="m-0 rounded-2xl border border-[#cfe0c4] bg-[#f1f7ec] px-4 py-3 text-sm text-[#3d5a2a]">No wording problems found.</p>;
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-[#ecd9ae] bg-[#fbf5e8] px-4 py-3 text-sm text-[#6b4f16]" aria-label="Wording flags">
+      {critique.flags.map((f) => (
+        <p key={f.issue} className="m-0"><strong className="font-medium">{ISSUES[f.issue]}:</strong> {f.note}</p>
+      ))}
+      <p className="m-0 text-xs">Advice from Gemini's critic. Fix the wording or approve it as it is.</p>
+    </div>
+  );
+}
 
 const smallButton =
   "inline-flex h-9 items-center justify-center rounded-full border border-line px-3.5 text-sm hover:bg-[#f1f1ee] disabled:cursor-not-allowed disabled:opacity-40";
@@ -45,6 +95,34 @@ function nextCode(b: QuestionBody): string {
   }
 }
 
+/** Survey title (for the researcher) and the intro respondents read before Q1. */
+function SurveyText({ survey, busy, onSave }: { survey: Survey; busy: boolean; onSave: (title: string, intro: string) => void }) {
+  const [title, setTitle] = useState(survey.title);
+  const [intro, setIntro] = useState(survey.intro);
+  // Follow the saved text (e.g. when the draft arrives) unless the reviewer is mid-edit.
+  const saved = useRef({ title: survey.title, intro: survey.intro });
+  useEffect(() => {
+    setTitle((t) => (t === saved.current.title ? survey.title : t));
+    setIntro((t) => (t === saved.current.intro ? survey.intro : t));
+    saved.current = { title: survey.title, intro: survey.intro };
+  }, [survey.title, survey.intro]);
+  const dirty = title !== survey.title || intro !== survey.intro;
+  return (
+    <section aria-label="Survey title and intro" className="grid grid-cols-[300px_1fr_auto] items-start gap-6 rounded-[26px] border border-line bg-white p-5">
+      <div className="flex flex-col gap-2">
+        <label htmlFor="stitle" className="font-display text-[15px] font-medium">Survey title</label>
+        <input id="stitle" className={input} value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
+        <p className="m-0 text-xs text-muted">For you; respondents don't see it.</p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label htmlFor="sintro" className="font-display text-[15px] font-medium">Intro shown to respondents</label>
+        <textarea id="sintro" rows={2} className={`${input} h-auto py-3`} value={intro} maxLength={2000} placeholder="Shown before the first question. Don't reveal the research objective." onChange={(e) => setIntro(e.target.value)} />
+      </div>
+      <button type="button" className={`${pillButton} mt-7`} disabled={!dirty || busy || !title.trim()} onClick={() => onSave(title, intro)}>Save</button>
+    </section>
+  );
+}
+
 /** Step 3 (docs/DATA_FLOW.md §3, Step 3): review every drafted question before the run. */
 export function QuestionnaireStep() {
   const { info, projectId, goTo, reach } = useWizard();
@@ -71,11 +149,13 @@ export function QuestionnaireStep() {
     load();
   }, [load]);
   const generating = survey?.draftStatus === "generating";
+  // Critic results arrive in the background, one question at a time.
+  const checking = !!survey && [...survey.questions, ...survey.suggestions].some((q) => q.critique?.status === "checking");
   useEffect(() => {
-    if (!generating) return;
+    if (!generating && !checking) return;
     const t = setInterval(load, 1500);
     return () => clearInterval(t);
-  }, [generating, load]);
+  }, [generating, checking, load]);
 
   const current = survey?.questions.find((q) => q.id === selected) ?? null;
   useEffect(() => {
@@ -116,6 +196,10 @@ export function QuestionnaireStep() {
     if (dirty && draft) q = await api.updateQuestion(current.id, draft);
     replace(await api.approveQuestion(q.id));
   });
+  const checkAgain = () => act(async () => {
+    if (!current) return;
+    replace(await api.critiqueQuestion(current.id));
+  });
   const addNew = () => act(async () => {
     if (!survey) return;
     const q = await api.addQuestion(survey.id);
@@ -132,20 +216,56 @@ export function QuestionnaireStep() {
     setSurvey(s);
     setSelected(id);
   });
+  const saveText = (title: string, intro: string) => act(async () => {
+    if (!survey) return;
+    setSurvey(await api.updateSurveyText(survey.id, title, intro));
+  });
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestNote, setSuggestNote] = useState("");
+  const suggestMore = async () => {
+    if (!survey) return;
+    setSuggestNote("");
+    setSuggesting(true);
+    const before = survey.suggestions.length;
+    const s = await act(() => api.suggestMore(survey.id));
+    setSuggesting(false);
+    if (!s) return;
+    setSurvey(s);
+    const added = s.suggestions.length - before;
+    setSuggestNote(added > 0 ? `${added} new suggestion${added === 1 ? "" : "s"} added.` : "Gemini only repeated questions you already have. Try again later, or write your own with + New.");
+  };
   const redraft = () => act(async () => {
     if (projectId == null) return;
     setSurvey(await api.redraftSurvey(projectId));
   });
-  const move = (id: number, by: -1 | 1) => act(async () => {
+  /** Saves a new order (same `reorder_questions` call for buttons, keys and drag) and keeps focus on the moved question. */
+  const reorder = (ids: number[], focus: number) => act(async () => {
+    if (!survey || sameOrder(ids, survey.questions.map((q) => q.id))) return;
+    setSurvey(await api.reorderQuestions(survey.id, ids));
+    requestAnimationFrame(() => listRef.current?.querySelector<HTMLButtonElement>(`[data-q="${focus}"]`)?.focus());
+  });
+  const move = (id: number, by: -1 | 1) => {
     if (!survey) return;
     const ids = survey.questions.map((q) => q.id);
     const i = ids.indexOf(id);
     const j = i + by;
     if (j < 0 || j >= ids.length) return;
     [ids[i], ids[j]] = [ids[j], ids[i]];
-    setSurvey(await api.reorderQuestions(survey.id, ids));
-    requestAnimationFrame(() => listRef.current?.querySelector<HTMLButtonElement>(`[data-q="${id}"]`)?.focus());
-  });
+    return reorder(ids, id);
+  };
+  // Drag and drop: `dropBefore` is the question the dragged one lands in front of (null = the end).
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [dropBefore, setDropBefore] = useState<number | null | undefined>(undefined);
+  const endDrag = () => {
+    setDragging(null);
+    setDropBefore(undefined);
+  };
+  const drop = () => {
+    if (survey && dragging != null && dropBefore !== undefined) {
+      reorder(moveBefore(survey.questions.map((q) => q.id), dragging, dropBefore), dragging);
+    }
+    endDrag();
+  };
   const startRun = () => act(async () => {
     if (projectId == null) return;
     run.reset();
@@ -153,6 +273,24 @@ export function QuestionnaireStep() {
     run.setRun(r);
     reach(3);
   });
+
+  // Cost of the run the button would start; refreshed when the questions change.
+  const [estimate, setEstimate] = useState<CostEstimate | null>(null);
+  const questionKey = survey ? JSON.stringify([survey.intro, survey.questions.map((q) => [q.id, q.body])]) : "";
+  useEffect(() => {
+    if (projectId == null || !survey || survey.questions.length === 0) {
+      setEstimate(null);
+      return;
+    }
+    let live = true;
+    const t = setTimeout(() => {
+      api.estimateRun(projectId).then((e) => live && setEstimate(e)).catch(() => live && setEstimate(null));
+    }, 400);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [projectId, questionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const heading = useMemo(() => {
     if (generating) return "Gemini is drafting the questionnaire…";
@@ -169,6 +307,15 @@ export function QuestionnaireStep() {
           <button type="button" className={pillButton} onClick={() => goTo(1)}>Back</button>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted" role="status">{heading}</span>
+            {estimate && (
+              <span
+                className="text-sm text-muted"
+                data-testid="cost-estimate"
+                title={`${estimate.model}: ${tokens(estimate.inputTokens)} input and about ${tokens(estimate.outputTokens)} output tokens${estimate.outputFromHistory ? " (output from earlier runs)" : ""}. Cache hits make it cheaper.`}
+              >
+                Est. {estimate.costUsd != null ? `≈ ${usd(estimate.costUsd)}` : "cost needs the Flash price in Settings"} · {estimate.calls.toLocaleString()} calls
+              </span>
+            )}
             <button type="button" className={primaryButton} disabled={!canRun || busy} onClick={startRun} title={canRun ? "" : "Approve every question first"}>
               Run Survey Simulation <Arrow />
             </button>
@@ -184,6 +331,8 @@ export function QuestionnaireStep() {
         </div>
       )}
 
+      {survey && <SurveyText survey={survey} busy={busy} onSave={saveText} />}
+
       <div className="grid min-h-[520px] grid-cols-[300px_1fr_280px] gap-6">
         {/* Question list */}
         <section aria-label="Questions" className="flex flex-col gap-3">
@@ -195,9 +344,41 @@ export function QuestionnaireStep() {
             </div>
           </div>
           {generating && <p className="m-0 text-sm text-muted" role="status">Drafting from your research brief. This takes a few seconds; you can add questions by hand meanwhile.</p>}
-          <ol ref={listRef} className="m-0 flex list-none flex-col gap-2 p-0">
-            {survey?.questions.map((q, i) => (
-              <li key={q.id}>
+          <ol
+            ref={listRef}
+            className="m-0 flex list-none flex-col gap-2 p-0"
+            onDragOver={(e) => {
+              if (dragging == null) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              // Below the last card: drop at the end. (Gaps between cards keep the last target.)
+              const last = e.currentTarget.lastElementChild?.getBoundingClientRect();
+              if (e.target === e.currentTarget && last && e.clientY > last.bottom) setDropBefore(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              drop();
+            }}
+          >
+            {survey?.questions.map((q, i, all) => (
+              <li
+                key={q.id}
+                draggable={!busy}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", String(q.id));
+                  setDragging(q.id);
+                }}
+                onDragEnd={endDrag}
+                onDragOver={(e) => {
+                  if (dragging == null) return;
+                  e.preventDefault();
+                  // Top half: in front of this card; bottom half: in front of the next one.
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setDropBefore(e.clientY < r.top + r.height / 2 ? q.id : all[i + 1]?.id ?? null);
+                }}
+                className={`relative rounded-2xl ${dragging === q.id ? "opacity-40" : ""} ${dragging != null && dropBefore === q.id ? "before:absolute before:-top-1.5 before:left-2 before:right-2 before:h-0.5 before:rounded-full before:bg-accent" : ""} ${dragging != null && dropBefore === null && i === all.length - 1 ? "after:absolute after:-bottom-1.5 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-accent" : ""}`}
+              >
                 <button
                   type="button"
                   data-q={q.id}
@@ -207,8 +388,8 @@ export function QuestionnaireStep() {
                     if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); move(q.id, -1); }
                     if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); move(q.id, 1); }
                   }}
-                  title="Alt+↑ / Alt+↓ to reorder"
-                  className={`flex w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left ${q.id === selected ? "border-accent bg-white ring-4 ring-accent/10" : "border-line bg-white hover:border-[#bdbdb5]"}`}
+                  title="Drag, or Alt+↑ / Alt+↓, to reorder"
+                  className={`flex w-full cursor-grab flex-col gap-1 rounded-2xl border px-4 py-3 text-left active:cursor-grabbing ${q.id === selected ? "border-accent bg-white ring-4 ring-accent/10" : "border-line bg-white hover:border-[#bdbdb5]"}`}
                 >
                   <span className="flex items-center justify-between gap-2 font-mono text-xs text-muted">
                     <span>{i + 1}. {q.code}</span>
@@ -218,6 +399,10 @@ export function QuestionnaireStep() {
                   </span>
                   <span className="line-clamp-2 text-[15px]">{q.body.text}</span>
                   <span className="text-xs text-muted">{typeLabel(q.body.questionType)}{q.origin === "human" ? " · written by you" : q.origin === "ai_edited" ? " · AI, edited" : " · AI draft"}</span>
+                  {(() => {
+                    const c = critiqueSummary(q.critique);
+                    return c && <span className={`text-xs ${c.warn ? "text-[#8a5a00]" : "text-muted"}`}>{c.text}</span>;
+                  })()}
                 </button>
               </li>
             ))}
@@ -302,6 +487,8 @@ export function QuestionnaireStep() {
                 </div>
               )}
 
+              <CritiquePanel critique={current.critique} busy={busy} onCheck={checkAgain} />
+
               {(current.objective || current.rationale) && (
                 <div className="rounded-2xl bg-[#f6f6f2] px-4 py-3 text-sm text-muted">
                   {current.objective && <p className="m-0"><strong className="font-medium text-ink">Serves:</strong> {current.objective}</p>}
@@ -325,13 +512,24 @@ export function QuestionnaireStep() {
 
         {/* Suggestions */}
         <aside aria-label="AI suggestions" className="flex flex-col gap-3">
-          <h2 className="m-0 font-display text-lg font-semibold">AI suggestions</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="m-0 font-display text-lg font-semibold">AI suggestions</h2>
+            <button type="button" className={smallButton} onClick={suggestMore} disabled={busy || generating || !survey} title="Ask Gemini for more ideas; repeats of your questions are left out">
+              {suggesting ? "Suggesting…" : "Suggest more"}
+            </button>
+          </div>
           <p className="m-0 text-sm text-muted">Optional extras from the draft. Added questions still need your approval.</p>
-          {survey?.suggestions.length === 0 && !generating && <p className="m-0 text-sm text-muted">No suggestions left.</p>}
+          {suggesting && <p className="m-0 text-sm text-muted" role="status">Gemini is writing new suggestions…</p>}
+          {suggestNote && !suggesting && <p className="m-0 text-sm text-muted" role="status">{suggestNote}</p>}
+          {survey?.suggestions.length === 0 && !generating && !suggesting && <p className="m-0 text-sm text-muted">No suggestions left.</p>}
           {survey?.suggestions.map((s) => (
             <div key={s.id} className="flex flex-col gap-2 rounded-2xl border border-line bg-white px-4 py-3">
               <span className="text-[15px]">{s.body.text}</span>
               <span className="text-xs text-muted">{typeLabel(s.body.questionType)}{s.body.options.length ? ` · ${s.body.options.length} options` : ""}</span>
+              {(() => {
+                const c = critiqueSummary(s.critique);
+                return c && <span className={`text-xs ${c.warn ? "text-[#8a5a00]" : "text-muted"}`} title={s.critique?.flags.map((f) => `${ISSUES[f.issue]}: ${f.note}`).join("\n")}>{c.text}</span>;
+              })()}
               <button type="button" className={`${smallButton} self-start`} onClick={() => addSuggestion(s.id)} disabled={busy}>+ Add to survey</button>
             </div>
           ))}

@@ -1,3 +1,5 @@
+-- Migration 1. Later changes are the numbered files in docs/migrations/, applied in order.
+
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 PRAGMA busy_timeout = 5000;

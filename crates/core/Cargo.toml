@@ -20,6 +20,7 @@ tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "
 ts-rs = { version = "12.0.1", features = ["serde-json-impl"] }
 
 [dev-dependencies]
+insta = "1.48.0"
 tempfile = "3.27.0"
 tokio = { version = "1.53.1", features = ["test-util", "macros", "rt-multi-thread"] }
 wiremock = "0.6.5"

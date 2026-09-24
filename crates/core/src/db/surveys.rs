@@ -8,8 +8,8 @@ use serde_json::{json, Value};
 
 use crate::error::{AppError, AppResult};
 use crate::model::{
-    DraftStatus, NumericRange, Question, QuestionBody, QuestionOrigin, QuestionType, ReviewStatus,
-    Scale, Survey, SurveyStatus,
+    CriticStatus, Critique, DraftStatus, NumericRange, Question, QuestionBody, QuestionOrigin,
+    QuestionType, ReviewStatus, Scale, Survey, SurveyStatus,
 };
 
 pub const MAX_OPTIONS: usize = 15;
@@ -174,7 +174,7 @@ fn body_from(text: String, qtype: &str, options: Option<String>) -> QuestionBody
     b
 }
 
-const QUESTION_COLS: &str = "id, code, order_index, question_text, question_type, options_json, is_active, origin, review_status, objective, rationale";
+const QUESTION_COLS: &str = "id, code, order_index, question_text, question_type, options_json, is_active, origin, review_status, objective, rationale, critic_json";
 
 fn question_from_row(r: &Row) -> rusqlite::Result<Question> {
     let origin: String = r.get(7)?;
@@ -198,6 +198,9 @@ fn question_from_row(r: &Row) -> rusqlite::Result<Question> {
         },
         objective: r.get(9)?,
         rationale: r.get(10)?,
+        critique: r
+            .get::<_, Option<String>>(11)?
+            .and_then(|j| serde_json::from_str(&j).ok()),
     })
 }
 
@@ -341,6 +344,15 @@ fn unique_code(conn: &Connection, survey_id: i64, wanted: &str) -> AppResult<Str
     unreachable!()
 }
 
+/// The text of every question the survey has, active, suggested or retired; "Suggest more"
+/// shows it to Gemini and removes duplicates of it.
+pub fn all_texts(conn: &Connection, survey_id: i64) -> AppResult<Vec<String>> {
+    Ok(conn
+        .prepare("SELECT question_text FROM questions WHERE survey_id = ?1 ORDER BY order_index")?
+        .query_map([survey_id], |r| r.get(0))?
+        .collect::<Result<_, _>>()?)
+}
+
 /// A drafted question, as saved by the draft job.
 pub struct NewQuestion {
     pub code: String,
@@ -416,7 +428,7 @@ pub fn update_question(conn: &Connection, id: i64, body: QuestionBody) -> AppRes
         "UPDATE questions SET question_text = ?2, question_type = ?3, options_json = ?4,
             origin = CASE origin WHEN 'ai' THEN 'ai_edited' ELSE origin END,
             review_status = CASE review_status WHEN 'suggested' THEN 'suggested' ELSE 'pending' END,
-            reviewed_at = NULL
+            reviewed_at = NULL, critic_json = NULL
          WHERE id = ?1",
         params![
             id,
@@ -427,6 +439,57 @@ pub fn update_question(conn: &Connection, id: i64, body: QuestionBody) -> AppRes
     )?;
     reopen(conn, survey_id)?;
     question(conn, id)
+}
+
+/// The wording a critique judged: text, type and options exactly as stored. A critique is
+/// saved only if the question still reads the same, so a slow check can't overwrite a newer one.
+const WORDING: &str =
+    "question_text || char(31) || question_type || char(31) || COALESCE(options_json, '')";
+
+/// A question queued for the critic.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CriticTarget {
+    pub question_id: i64,
+    pub body: QuestionBody,
+    pub wording: String,
+}
+
+/// Marks the question as being checked and returns what the critic should judge.
+pub fn start_critique(conn: &Connection, id: i64, prompt_version: &str) -> AppResult<CriticTarget> {
+    let q = question(conn, id)?;
+    let checking = Critique {
+        status: CriticStatus::Checking,
+        flags: Vec::new(),
+        error: None,
+        prompt_version: prompt_version.to_string(),
+    };
+    conn.execute(
+        "UPDATE questions SET critic_json = ?2 WHERE id = ?1",
+        params![id, serde_json::to_string(&checking).unwrap_or_default()],
+    )?;
+    let wording = conn.query_row(
+        &format!("SELECT {WORDING} FROM questions WHERE id = ?1"),
+        [id],
+        |r| r.get(0),
+    )?;
+    Ok(CriticTarget {
+        question_id: id,
+        body: q.body,
+        wording,
+    })
+}
+
+/// Stores the critic's result. Returns false (and stores nothing) when the question has been
+/// edited or deleted since the check started.
+pub fn save_critique(conn: &Connection, target: &CriticTarget, c: &Critique) -> AppResult<bool> {
+    Ok(conn.execute(
+        &format!("UPDATE questions SET critic_json = ?2 WHERE id = ?1 AND {WORDING} = ?3"),
+        params![
+            target.question_id,
+            serde_json::to_string(c).unwrap_or_default(),
+            target.wording
+        ],
+    )? == 1)
 }
 
 /// Rewrites `order_index` for the active questions in the given order. Runs in one
@@ -580,17 +643,66 @@ pub fn clear_untouched_ai(conn: &Connection, survey_id: i64) -> AppResult<()> {
     Ok(())
 }
 
-pub fn set_title_intro(
+/// The draft's intro, unless a person has already edited the survey's title or intro.
+pub fn set_drafted_intro(conn: &Connection, survey_id: i64, intro: &str) -> AppResult<()> {
+    conn.execute(
+        "UPDATE surveys SET intro_text = ?2 WHERE id = ?1 AND text_edited = 0",
+        params![survey_id, intro],
+    )?;
+    Ok(())
+}
+
+pub const MAX_TITLE: usize = 200;
+pub const MAX_INTRO: usize = 2_000;
+
+/// Step 3: the reviewer edits the survey title and the intro respondents see before Q1.
+/// Respondents see the intro, so changing it sends an approved survey back to review, and
+/// it can't change under a run that isn't finished (resuming would mix two intros).
+pub fn update_text(
     conn: &Connection,
     survey_id: i64,
     title: &str,
     intro: &str,
-) -> AppResult<()> {
+) -> AppResult<Survey> {
+    let (title, intro) = (title.trim(), intro.trim());
+    if title.is_empty() {
+        return Err(AppError::invalid("the survey needs a title"));
+    }
+    if title.chars().count() > MAX_TITLE {
+        return Err(AppError::invalid(format!(
+            "the title is over {MAX_TITLE} characters"
+        )));
+    }
+    if intro.chars().count() > MAX_INTRO {
+        return Err(AppError::invalid(format!(
+            "the intro is over {MAX_INTRO} characters"
+        )));
+    }
+    let current = get(conn, survey_id)?;
+    if current.title == title && current.intro == intro {
+        return Ok(current);
+    }
+    if current.intro != intro {
+        let unfinished = conn
+            .query_row(
+                "SELECT 1 FROM simulation_runs WHERE survey_id = ?1 AND status IN ('queued','running','paused')",
+                [survey_id],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if unfinished {
+            return Err(AppError::invalid(
+                "a simulation run on this survey isn't finished; stop it before changing the intro respondents see",
+            ));
+        }
+        reopen(conn, survey_id)?;
+    }
     conn.execute(
-        "UPDATE surveys SET title = ?2, intro_text = ?3 WHERE id = ?1",
+        "UPDATE surveys SET title = ?2, intro_text = ?3, text_edited = 1 WHERE id = ?1",
         params![survey_id, title, intro],
     )?;
-    Ok(())
+    get(conn, survey_id)
 }
 
 pub fn set_generation(
@@ -818,6 +930,99 @@ mod tests {
         assert_eq!(ids, [approved, edited, human]);
         assert!(!ids.contains(&untouched));
         assert!(survey.suggestions.is_empty());
+    }
+
+    #[test]
+    fn a_critique_is_stored_with_its_question_and_cleared_by_an_edit() {
+        use crate::model::{CriticFlag, CriticIssue};
+        let (conn, s) = setup();
+        let a = ai(&conn, s, "A", false);
+        assert!(question(&conn, a).unwrap().critique.is_none());
+        let target = start_critique(&conn, a, "critic.v1").unwrap();
+        assert_eq!(target.body.text, "Question A?");
+        let q = question(&conn, a).unwrap();
+        assert_eq!(q.critique.unwrap().status, CriticStatus::Checking);
+        let done = Critique {
+            status: CriticStatus::Done,
+            flags: vec![CriticFlag {
+                issue: CriticIssue::DoubleBarrelled,
+                note: "Asks two things.".into(),
+            }],
+            error: None,
+            prompt_version: "critic.v1".into(),
+        };
+        assert!(save_critique(&conn, &target, &done).unwrap());
+        assert_eq!(question(&conn, a).unwrap().critique.unwrap(), done);
+        // Flags never block approval.
+        assert_eq!(
+            approve_question(&conn, a).unwrap().review_status,
+            ReviewStatus::Accepted
+        );
+
+        // An edit clears the flags, and a check of the old wording can't bring them back.
+        let stale = start_critique(&conn, a, "critic.v1").unwrap();
+        let mut body = stale.body.clone();
+        body.text = "Question A, reworded?".into();
+        let q = update_question(&conn, a, body).unwrap();
+        assert!(q.critique.is_none());
+        assert!(!save_critique(&conn, &stale, &done).unwrap());
+        assert!(question(&conn, a).unwrap().critique.is_none());
+
+        // A check cut short by closing the app shows as failed, so it can be run again.
+        start_critique(&conn, a, "critic.v1").unwrap();
+        crate::db::runs::recover_on_launch(&conn).unwrap();
+        let c = question(&conn, a).unwrap().critique.unwrap();
+        assert_eq!(c.status, CriticStatus::Failed);
+        assert!(c.error.unwrap().contains("app closed"));
+    }
+
+    #[test]
+    fn title_and_intro_are_saved_and_redraft_keeps_them() {
+        let (conn, s) = setup();
+        set_drafted_intro(&conn, s, "Drafted intro.").unwrap();
+        assert_eq!(get(&conn, s).unwrap().intro, "Drafted intro.");
+        assert!(update_text(&conn, s, "  ", "x").is_err());
+        assert!(update_text(&conn, s, "T", &"x".repeat(MAX_INTRO + 1)).is_err());
+        conn.execute("UPDATE surveys SET status = 'approved'", [])
+            .unwrap();
+        // The title is for the researcher only; renaming keeps the approval.
+        let survey = update_text(&conn, s, " Phone study ", "Drafted intro.").unwrap();
+        assert_eq!(survey.title, "Phone study");
+        assert_eq!(survey.status, SurveyStatus::Approved);
+        // Respondents read the intro, so changing it needs approving again.
+        let survey = update_text(&conn, s, "Phone study", " Thanks for helping. ").unwrap();
+        assert_eq!(survey.intro, "Thanks for helping.");
+        assert_eq!(survey.status, SurveyStatus::InReview);
+        // A later draft doesn't overwrite what the person wrote.
+        set_drafted_intro(&conn, s, "Another drafted intro.").unwrap();
+        assert_eq!(get(&conn, s).unwrap().intro, "Thanks for helping.");
+    }
+
+    #[test]
+    fn the_intro_cannot_change_under_an_unfinished_run() {
+        let (conn, s) = setup();
+        let a = ai(&conn, s, "A", false);
+        approve_question(&conn, a).unwrap();
+        conn.execute_batch(
+            "INSERT INTO cohorts(project_id, name, config_json, status) VALUES (1, 'c', '{}', 'locked');
+             UPDATE surveys SET status = 'approved';",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO simulation_runs(project_id, survey_id, cohort_id, survey_hash, provider, model, temperature, answer_mode, prompt_version, seed, max_concurrency, status)
+             VALUES (1, ?1, 1, 'h', 'gemini', 'm', 1.0, 'whole_survey', 'v', 1, 4, 'paused')",
+            [s],
+        )
+        .unwrap();
+        assert!(update_text(&conn, s, "Renamed", "").is_ok());
+        let err = update_text(&conn, s, "Renamed", "New intro").unwrap_err();
+        assert!(err.message.contains("stop it"));
+        conn.execute("UPDATE simulation_runs SET status = 'stopped'", [])
+            .unwrap();
+        assert_eq!(
+            update_text(&conn, s, "Renamed", "New intro").unwrap().intro,
+            "New intro"
+        );
     }
 
     #[test]

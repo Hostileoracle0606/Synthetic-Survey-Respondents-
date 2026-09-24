@@ -2,13 +2,15 @@
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::db::{cohorts, settings, surveys};
+use crate::db::{cohorts, surveys};
 use crate::engine::answer::{self, Checked};
 use crate::error::{AppError, AppResult};
 use crate::llm::Usage;
 use crate::model::{
-    CohortStatus, ModelPrice, Question, RespondentDetail, RunConfig, RunStatus, SimulationRun,
+    CohortStatus, CostEstimate, ModelPrice, Question, QuestionType, RespondentDetail, RunConfig,
+    RunStatus, SimulationRun,
 };
+use crate::pricing;
 
 /// Everything fixed when a run starts.
 pub struct RunSettings<'a> {
@@ -16,6 +18,8 @@ pub struct RunSettings<'a> {
     pub max_concurrency: u32,
     /// Gemini requests still available today; the run is refused if it can't finish.
     pub requests_left_today: u32,
+    /// From [`estimate`], stored so Step 4 can show actual against estimated.
+    pub est_cost_usd: Option<f64>,
 }
 
 /// Run Survey Simulation: in one transaction, approve the survey and insert the run. The
@@ -65,8 +69,8 @@ pub fn start(
     )?;
     tx.execute(
         "INSERT INTO simulation_runs(project_id, survey_id, cohort_id, survey_hash, provider, model, temperature,
-            answer_mode, prompt_version, seed, max_concurrency, status)
-         VALUES (?1, ?2, ?3, ?4, 'gemini', ?5, ?6, 'whole_survey', ?7, ?8, ?9, 'queued')",
+            answer_mode, prompt_version, seed, max_concurrency, status, est_cost_usd)
+         VALUES (?1, ?2, ?3, ?4, 'gemini', ?5, ?6, 'whole_survey', ?7, ?8, ?9, 'queued', ?10)",
         params![
             project_id,
             survey.id,
@@ -76,7 +80,8 @@ pub fn start(
             f64::from(answer::TEMPERATURE),
             answer::PROMPT_VERSION,
             seed as i64,
-            s.max_concurrency
+            s.max_concurrency,
+            s.est_cost_usd
         ],
     )?;
     let id = tx.last_insert_rowid();
@@ -99,7 +104,7 @@ fn kept_respondents(conn: &Connection, cohort_id: i64) -> AppResult<u32> {
 pub fn get(conn: &Connection, id: i64) -> AppResult<SimulationRun> {
     let row = conn
         .query_row(
-            "SELECT r.project_id, r.survey_id, r.cohort_id, r.status, r.model, r.error, r.created_at, r.prompt_version,
+            "SELECT r.project_id, r.survey_id, r.cohort_id, r.status, r.model, r.error, r.created_at, r.prompt_version, r.est_cost_usd,
                 (SELECT COUNT(*) FROM questions q WHERE q.survey_id = r.survey_id AND q.is_active = 1),
                 (SELECT COUNT(*) FROM responses x WHERE x.run_id = r.id),
                 (SELECT COUNT(DISTINCT x.respondent_id) FROM responses x WHERE x.run_id = r.id)
@@ -114,15 +119,19 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<SimulationRun> {
                     r.get::<_, String>(4)?,
                     r.get::<_, Option<String>>(5)?,
                     r.get::<_, String>(6)?,
-                    r.get::<_, u32>(8)?,
                     r.get::<_, u32>(9)?,
                     r.get::<_, u32>(10)?,
+                    r.get::<_, u32>(11)?,
                     r.get::<_, String>(7)?,
+                    r.get::<_, Option<f64>>(8)?,
                 ))
             },
         )
         .optional()?
         .ok_or_else(|| AppError::not_found(format!("run {id} not found")))?;
+    let cost_usd = pricing::run_price(conn)?
+        .map(|p| pricing::run_cost(conn, id, &p))
+        .transpose()?;
     Ok(SimulationRun {
         id,
         project_id: row.0,
@@ -137,6 +146,92 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<SimulationRun> {
         respondents_done: row.9,
         error: row.5,
         created_at: row.6,
+        est_cost_usd: row.11,
+        cost_usd,
+    })
+}
+
+/// Rule of thumb for output tokens when no earlier run on the model says otherwise: the
+/// reply's JSON wrapper and some thinking per call, plus an answer and a one-sentence reason
+/// per question (open answers are longer).
+const OUTPUT_PER_CALL: u64 = 300;
+const OUTPUT_PER_QUESTION: u64 = 45;
+const OUTPUT_PER_OPEN_QUESTION: u64 = 100;
+
+/// The estimate shown before Run Survey Simulation: one call per kept respondent, input
+/// tokens counted from the real prompts (≈ 4 characters per token, schema included), output
+/// tokens from earlier runs on the same model when there are any. Every input token is
+/// priced as uncached, so implicit cache hits only make the run cheaper.
+pub fn estimate(conn: &Connection, project_id: i64, model: &str) -> AppResult<CostEstimate> {
+    let cohort = cohorts::latest(conn, project_id)?
+        .filter(|c| c.status == CohortStatus::Locked)
+        .ok_or_else(|| AppError::invalid("lock a cohort in Step 2 first"))?;
+    let survey = surveys::for_project(conn, project_id)?;
+    let seed = cohort.config.seed;
+    let ids: Vec<i64> = conn
+        .prepare(
+            "SELECT id FROM respondents WHERE cohort_id = ?1 AND screen_status <> 'failed' ORDER BY ordinal",
+        )?
+        .query_map([cohort.id], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    let mut input_tokens = 0u64;
+    for id in &ids {
+        let d = cohorts::detail(conn, *id)?;
+        let pairs: Vec<(&Question, Vec<String>)> = survey
+            .questions
+            .iter()
+            .map(|q| (q, answer::shown_order(q, seed, d.ordinal)))
+            .collect();
+        let req = answer::build_request(model, &survey.intro, &pairs, &answer::persona_text(&d));
+        let chars = req.system.len() + req.prompt.len() + req.schema.to_string().len();
+        input_tokens += chars.div_ceil(4) as u64;
+    }
+    let calls = ids.len() as u32;
+    // Output tokens per answer stored, from earlier runs on this model.
+    let history: Option<f64> = conn.query_row(
+        "SELECT CAST(SUM(c.output_tokens) AS REAL) / NULLIF((SELECT COUNT(*) FROM responses x
+                 JOIN simulation_runs rr ON rr.id = x.run_id WHERE rr.model = ?1), 0)
+         FROM llm_calls c JOIN simulation_runs r ON r.id = c.run_id
+         WHERE r.model = ?1 AND c.purpose = 'answer' AND c.output_tokens IS NOT NULL",
+        [model],
+        |r| r.get(0),
+    )?;
+    let questions = survey.questions.len() as u64;
+    let (output_tokens, output_from_history) = match history {
+        Some(per_answer) if per_answer > 0.0 => (
+            (per_answer * (questions * u64::from(calls)) as f64).ceil() as u64,
+            true,
+        ),
+        _ => {
+            let per_call = OUTPUT_PER_CALL
+                + survey
+                    .questions
+                    .iter()
+                    .map(|q| match q.body.question_type {
+                        QuestionType::OpenEnded => OUTPUT_PER_OPEN_QUESTION,
+                        _ => OUTPUT_PER_QUESTION,
+                    })
+                    .sum::<u64>();
+            (per_call * u64::from(calls), false)
+        }
+    };
+    let cost_usd = pricing::run_price(conn)?.map(|p| {
+        pricing::cost(
+            &p,
+            &Usage {
+                input_tokens: input_tokens.min(u64::from(u32::MAX)) as u32,
+                cached_tokens: 0,
+                output_tokens: output_tokens.min(u64::from(u32::MAX)) as u32,
+            },
+        )
+    });
+    Ok(CostEstimate {
+        model: model.to_string(),
+        calls,
+        input_tokens,
+        output_tokens,
+        cost_usd,
+        output_from_history,
     })
 }
 
@@ -168,12 +263,17 @@ pub fn set_status(
 }
 
 /// On launch, after the app closed or crashed: runs left `running` become `paused`, and
-/// survey drafts or report syntheses left `generating` become `failed`, so their Retry and
-/// Regenerate buttons work again. Returns the number of runs paused.
+/// survey drafts, wording checks or report syntheses left unfinished become `failed`, so their
+/// Retry, Check again and Regenerate buttons work again. Returns the number of runs paused.
 pub fn recover_on_launch(conn: &Connection) -> AppResult<usize> {
     conn.execute(
         "UPDATE surveys SET draft_status = 'failed', draft_error = 'The app closed while the draft was being written.'
          WHERE draft_status = 'generating'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE questions SET critic_json = json_set(critic_json, '$.status', 'failed', '$.error', 'The app closed while the wording was being checked.')
+         WHERE json_extract(critic_json, '$.status') = 'checking'",
         [],
     )?;
     conn.execute(
@@ -206,9 +306,11 @@ pub struct RunPlan {
     pub respondents_total: u32,
     pub respondents_done: u32,
     pub answered: u32,
-    /// The saved Flash price (BACKLOG B1), if any: every simulation run answers with Flash. The
-    /// live cost estimate stays "$—" until the user fills in Settings.
+    /// The saved Flash price (BACKLOG B1), if any: every simulation run answers with Flash.
+    /// Without one the live cost stays "$—" until the user fills in Settings.
     pub price: Option<ModelPrice>,
+    /// Cost of the calls already made (a resumed run continues from here).
+    pub cost_so_far: f64,
 }
 
 pub fn plan(conn: &Connection, run_id: i64) -> AppResult<RunPlan> {
@@ -261,7 +363,8 @@ pub fn plan(conn: &Connection, run_id: i64) -> AppResult<RunPlan> {
         respondents_total: run.respondents,
         respondents_done: run.respondents_done,
         answered: run.answered,
-        price: settings::get(conn)?.flash_price,
+        price: pricing::run_price(conn)?,
+        cost_so_far: run.cost_usd.unwrap_or(0.0),
     })
 }
 

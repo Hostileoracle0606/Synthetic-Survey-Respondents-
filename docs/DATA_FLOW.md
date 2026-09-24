@@ -158,7 +158,7 @@ The critic (Pro) runs on every drafted, added or regenerated question. Its flags
 | --- | --- |
 | Answers collected (450 / 1,000) | Count of `responses` for the run ÷ (N × active questions) |
 | Respondents complete | Respondents with all answers stored |
-| API cost so far | Sum over this run's `llm_calls` of uncached input × input price + cached input × cached price + output × output price, using the price table in `settings`. Shown as "$—" until prices are set |
+| API cost so far | Sum over this run's `llm_calls` of uncached input × input price + cached input × cached price + output × output price, using the Flash price saved in Settings (a cached-input price is optional; without it cached tokens are charged at the input price). Shown as "$—" until a Flash price is saved. The card also shows the estimate stored on the run |
 | Average latency, p95 | `llm_calls.latency_ms` for the run's answer calls |
 | Throughput | Answers stored in the last 60 s |
 | Concurrency | Rate limiter's current value |
