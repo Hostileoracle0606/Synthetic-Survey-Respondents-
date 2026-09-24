@@ -252,6 +252,14 @@ export const mock = {
     fresh.questions = s.questions;
     return structuredClone(fresh);
   },
+  updateSurveyText: async (title: string, intro: string): Promise<Survey> => {
+    const s = ensureSurvey();
+    if (!title.trim()) throw { code: "invalid_input", message: "the survey needs a title" };
+    if (s.intro !== intro.trim() && s.status === "approved") s.status = "in_review";
+    s.title = title.trim();
+    s.intro = intro.trim();
+    return structuredClone(s);
+  },
   updateQuestion: async (id: number, body: QuestionBody): Promise<Question> =>
     structuredClone(patchQuestion(id, (x) => ({ ...x, body, origin: x.origin === "ai" ? "ai_edited" : x.origin, reviewStatus: "pending" }))),
   reorderQuestions: async (ids: number[]): Promise<Survey> => {

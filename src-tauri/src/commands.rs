@@ -281,6 +281,17 @@ pub async fn redraft_survey(state: State<'_, AppState>, project_id: i64) -> AppR
     surveys::get(&*lock(&state)?, survey.id)
 }
 
+/// Step 3: the survey title and the intro respondents see before the first question.
+#[tauri::command]
+pub fn update_survey_text(
+    state: State<'_, AppState>,
+    survey_id: i64,
+    title: String,
+    intro: String,
+) -> AppResult<Survey> {
+    surveys::update_text(&*lock(&state)?, survey_id, &title, &intro)
+}
+
 #[tauri::command]
 pub fn update_question(
     state: State<'_, AppState>,

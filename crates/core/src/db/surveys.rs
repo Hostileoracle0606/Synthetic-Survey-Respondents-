@@ -580,17 +580,66 @@ pub fn clear_untouched_ai(conn: &Connection, survey_id: i64) -> AppResult<()> {
     Ok(())
 }
 
-pub fn set_title_intro(
+/// The draft's intro, unless a person has already edited the survey's title or intro.
+pub fn set_drafted_intro(conn: &Connection, survey_id: i64, intro: &str) -> AppResult<()> {
+    conn.execute(
+        "UPDATE surveys SET intro_text = ?2 WHERE id = ?1 AND text_edited = 0",
+        params![survey_id, intro],
+    )?;
+    Ok(())
+}
+
+pub const MAX_TITLE: usize = 200;
+pub const MAX_INTRO: usize = 2_000;
+
+/// Step 3: the reviewer edits the survey title and the intro respondents see before Q1.
+/// Respondents see the intro, so changing it sends an approved survey back to review, and
+/// it can't change under a run that isn't finished (resuming would mix two intros).
+pub fn update_text(
     conn: &Connection,
     survey_id: i64,
     title: &str,
     intro: &str,
-) -> AppResult<()> {
+) -> AppResult<Survey> {
+    let (title, intro) = (title.trim(), intro.trim());
+    if title.is_empty() {
+        return Err(AppError::invalid("the survey needs a title"));
+    }
+    if title.chars().count() > MAX_TITLE {
+        return Err(AppError::invalid(format!(
+            "the title is over {MAX_TITLE} characters"
+        )));
+    }
+    if intro.chars().count() > MAX_INTRO {
+        return Err(AppError::invalid(format!(
+            "the intro is over {MAX_INTRO} characters"
+        )));
+    }
+    let current = get(conn, survey_id)?;
+    if current.title == title && current.intro == intro {
+        return Ok(current);
+    }
+    if current.intro != intro {
+        let unfinished = conn
+            .query_row(
+                "SELECT 1 FROM simulation_runs WHERE survey_id = ?1 AND status IN ('queued','running','paused')",
+                [survey_id],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if unfinished {
+            return Err(AppError::invalid(
+                "a simulation run on this survey isn't finished; stop it before changing the intro respondents see",
+            ));
+        }
+        reopen(conn, survey_id)?;
+    }
     conn.execute(
-        "UPDATE surveys SET title = ?2, intro_text = ?3 WHERE id = ?1",
+        "UPDATE surveys SET title = ?2, intro_text = ?3, text_edited = 1 WHERE id = ?1",
         params![survey_id, title, intro],
     )?;
-    Ok(())
+    get(conn, survey_id)
 }
 
 pub fn set_generation(
@@ -818,6 +867,55 @@ mod tests {
         assert_eq!(ids, [approved, edited, human]);
         assert!(!ids.contains(&untouched));
         assert!(survey.suggestions.is_empty());
+    }
+
+    #[test]
+    fn title_and_intro_are_saved_and_redraft_keeps_them() {
+        let (conn, s) = setup();
+        set_drafted_intro(&conn, s, "Drafted intro.").unwrap();
+        assert_eq!(get(&conn, s).unwrap().intro, "Drafted intro.");
+        assert!(update_text(&conn, s, "  ", "x").is_err());
+        assert!(update_text(&conn, s, "T", &"x".repeat(MAX_INTRO + 1)).is_err());
+        conn.execute("UPDATE surveys SET status = 'approved'", [])
+            .unwrap();
+        // The title is for the researcher only; renaming keeps the approval.
+        let survey = update_text(&conn, s, " Phone study ", "Drafted intro.").unwrap();
+        assert_eq!(survey.title, "Phone study");
+        assert_eq!(survey.status, SurveyStatus::Approved);
+        // Respondents read the intro, so changing it needs approving again.
+        let survey = update_text(&conn, s, "Phone study", " Thanks for helping. ").unwrap();
+        assert_eq!(survey.intro, "Thanks for helping.");
+        assert_eq!(survey.status, SurveyStatus::InReview);
+        // A later draft doesn't overwrite what the person wrote.
+        set_drafted_intro(&conn, s, "Another drafted intro.").unwrap();
+        assert_eq!(get(&conn, s).unwrap().intro, "Thanks for helping.");
+    }
+
+    #[test]
+    fn the_intro_cannot_change_under_an_unfinished_run() {
+        let (conn, s) = setup();
+        let a = ai(&conn, s, "A", false);
+        approve_question(&conn, a).unwrap();
+        conn.execute_batch(
+            "INSERT INTO cohorts(project_id, name, config_json, status) VALUES (1, 'c', '{}', 'locked');
+             UPDATE surveys SET status = 'approved';",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO simulation_runs(project_id, survey_id, cohort_id, survey_hash, provider, model, temperature, answer_mode, prompt_version, seed, max_concurrency, status)
+             VALUES (1, ?1, 1, 'h', 'gemini', 'm', 1.0, 'whole_survey', 'v', 1, 4, 'paused')",
+            [s],
+        )
+        .unwrap();
+        assert!(update_text(&conn, s, "Renamed", "").is_ok());
+        let err = update_text(&conn, s, "Renamed", "New intro").unwrap_err();
+        assert!(err.message.contains("stop it"));
+        conn.execute("UPDATE simulation_runs SET status = 'stopped'", [])
+            .unwrap();
+        assert_eq!(
+            update_text(&conn, s, "Renamed", "New intro").unwrap().intro,
+            "New intro"
+        );
     }
 
     #[test]

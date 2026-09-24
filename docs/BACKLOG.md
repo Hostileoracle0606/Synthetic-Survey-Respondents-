@@ -31,7 +31,7 @@ As of 2026-09-23. The census population is Canada's (Statistics Canada 2021 Cens
 | B13 | `insta` snapshot tests for the prompts, and the nightly check that Gemini's implicit cache hits (`cached_tokens` > 0) | Prompts are versioned and covered by unit and live tests | Snapshots fail on any unversioned prompt change; the live job reports cache hits |
 | B14 | SPEC §11 performance check: 60 fps and memory limits with 1,000 respondents streaming | Needs the Windows release VMs (M5) | Measured on the M5 VMs within the limits |
 | ~~B15~~ | ~~SPEC §11 check that no API key appears in the database, logs or exports~~ **Done in M4** (`no_api_key_in_the_database_logs_or_exports`) | Exports arrive in M4; the key only ever lives in the OS keychain | A test searches all three after a run with a known fake key |
-| B16 | Edit the survey title and the intro shown to respondents in Step 3 | The draft writes a neutral intro | Both are editable in Step 3 and saved |
+| ~~B16~~ | ~~Edit the survey title and the intro shown to respondents in Step 3~~ **Done:** `update_survey_text`; changing the intro reopens an approved survey and is refused while a run is unfinished; Redraft keeps edited text (migration 002) | The draft writes a neutral intro | Both are editable in Step 3 and saved |
 
 ## Deferred from M4
 

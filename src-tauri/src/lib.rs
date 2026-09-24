@@ -70,6 +70,7 @@ pub fn run() {
             commands::lock_cohort,
             commands::get_survey,
             commands::redraft_survey,
+            commands::update_survey_text,
             commands::update_question,
             commands::reorder_questions,
             commands::add_question,

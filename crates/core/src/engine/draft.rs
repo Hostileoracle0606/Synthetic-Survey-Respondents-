@@ -226,12 +226,7 @@ pub async fn run(
                     surveys::insert_ai(c, survey_id, q, true)?;
                 }
                 if !d.intro.is_empty() {
-                    let title: String = c.query_row(
-                        "SELECT title FROM surveys WHERE id = ?1",
-                        [survey_id],
-                        |r| r.get(0),
-                    )?;
-                    surveys::set_title_intro(c, survey_id, &title, &d.intro)?;
+                    surveys::set_drafted_intro(c, survey_id, &d.intro)?;
                 }
                 surveys::set_draft_status(c, survey_id, DraftStatus::Ready, None)
             }

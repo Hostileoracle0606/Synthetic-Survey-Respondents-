@@ -74,6 +74,8 @@ export const api = {
   lockCohort: (cohortId: number): Promise<Cohort> => (inTauri ? invoke("lock_cohort", { cohortId }) : mock.lockCohort()),
   getSurvey: (projectId: number): Promise<Survey> => (inTauri ? invoke("get_survey", { projectId }) : mock.getSurvey()),
   redraftSurvey: (projectId: number): Promise<Survey> => (inTauri ? invoke("redraft_survey", { projectId }) : mock.redraftSurvey()),
+  updateSurveyText: (surveyId: number, title: string, intro: string): Promise<Survey> =>
+    inTauri ? invoke("update_survey_text", { surveyId, title, intro }) : mock.updateSurveyText(title, intro),
   updateQuestion: (questionId: number, body: QuestionBody): Promise<Question> =>
     inTauri ? invoke("update_question", { questionId, body }) : mock.updateQuestion(questionId, body),
   reorderQuestions: (surveyId: number, orderedIds: number[]): Promise<Survey> =>

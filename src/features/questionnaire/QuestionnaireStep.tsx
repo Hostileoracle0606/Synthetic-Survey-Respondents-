@@ -45,6 +45,34 @@ function nextCode(b: QuestionBody): string {
   }
 }
 
+/** Survey title (for the researcher) and the intro respondents read before Q1. */
+function SurveyText({ survey, busy, onSave }: { survey: Survey; busy: boolean; onSave: (title: string, intro: string) => void }) {
+  const [title, setTitle] = useState(survey.title);
+  const [intro, setIntro] = useState(survey.intro);
+  // Follow the saved text (e.g. when the draft arrives) unless the reviewer is mid-edit.
+  const saved = useRef({ title: survey.title, intro: survey.intro });
+  useEffect(() => {
+    setTitle((t) => (t === saved.current.title ? survey.title : t));
+    setIntro((t) => (t === saved.current.intro ? survey.intro : t));
+    saved.current = { title: survey.title, intro: survey.intro };
+  }, [survey.title, survey.intro]);
+  const dirty = title !== survey.title || intro !== survey.intro;
+  return (
+    <section aria-label="Survey title and intro" className="grid grid-cols-[300px_1fr_auto] items-start gap-6 rounded-[26px] border border-line bg-white p-5">
+      <div className="flex flex-col gap-2">
+        <label htmlFor="stitle" className="font-display text-[15px] font-medium">Survey title</label>
+        <input id="stitle" className={input} value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
+        <p className="m-0 text-xs text-muted">For you; respondents don't see it.</p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label htmlFor="sintro" className="font-display text-[15px] font-medium">Intro shown to respondents</label>
+        <textarea id="sintro" rows={2} className={`${input} h-auto py-3`} value={intro} maxLength={2000} placeholder="Shown before the first question. Don't reveal the research objective." onChange={(e) => setIntro(e.target.value)} />
+      </div>
+      <button type="button" className={`${pillButton} mt-7`} disabled={!dirty || busy || !title.trim()} onClick={() => onSave(title, intro)}>Save</button>
+    </section>
+  );
+}
+
 /** Step 3 (docs/DATA_FLOW.md §3, Step 3): review every drafted question before the run. */
 export function QuestionnaireStep() {
   const { info, projectId, goTo, reach } = useWizard();
@@ -132,6 +160,10 @@ export function QuestionnaireStep() {
     setSurvey(s);
     setSelected(id);
   });
+  const saveText = (title: string, intro: string) => act(async () => {
+    if (!survey) return;
+    setSurvey(await api.updateSurveyText(survey.id, title, intro));
+  });
   const redraft = () => act(async () => {
     if (projectId == null) return;
     setSurvey(await api.redraftSurvey(projectId));
@@ -183,6 +215,8 @@ export function QuestionnaireStep() {
           <button type="button" className={smallButton} onClick={redraft}>Retry draft</button>
         </div>
       )}
+
+      {survey && <SurveyText survey={survey} busy={busy} onSave={saveText} />}
 
       <div className="grid min-h-[520px] grid-cols-[300px_1fr_280px] gap-6">
         {/* Question list */}
