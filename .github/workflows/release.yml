@@ -134,7 +134,8 @@ jobs:
       - run: pnpm tauri icon src-tauri/app-icon.png
       - run: cargo clippy -p survey-app --features perf -- -D warnings
       - name: Build the app with the perf harness
-        run: pnpm tauri build --no-bundle --features perf
+        # perf.tauri.conf.json opens the WebView2 DevTools port the harness drives.
+        run: pnpm tauri build --no-bundle --features perf --config scripts/release/perf.tauri.conf.json
         env:
           VITE_PERF_HARNESS: "1"
       - run: cargo build --release -p survey-evals --bin mock-gemini --bin perf-seed

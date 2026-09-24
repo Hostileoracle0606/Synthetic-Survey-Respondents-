@@ -22,18 +22,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (m) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
 
 async function pageTarget() {
-  const until = Date.now() + 90_000;
+  const until = Date.now() + 120_000;
+  let last = "nothing listening";
   while (Date.now() < until) {
     try {
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       const page = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
       if (page) return page;
-    } catch {
-      // WebView2 not listening yet.
+      last = `targets: ${JSON.stringify(list.map((t) => ({ type: t.type, url: t.url })))}`;
+    } catch (e) {
+      last = `${e.message}${e.cause ? ` (${e.cause.code ?? e.cause.message})` : ""}`;
     }
     await sleep(500);
   }
-  throw new Error(`no WebView2 page on port ${port} after 90 s`);
+  throw new Error(`no WebView2 page on port ${port} after 120 s; last: ${last}`);
 }
 
 const target = await pageTarget();

@@ -11,7 +11,8 @@
 
   Usage: perf-1000.ps1 -App <survey-app.exe> -Mock <mock-gemini.exe> -Seed <perf-seed.exe>
                        [-Runs 3] [-DelayMs 300] [-OutDir perf-results] [-StrictFps]
-  The app must be built with `--features perf` and VITE_PERF_HARNESS=1.
+  The app must be built with `--features perf`, VITE_PERF_HARNESS=1 and
+  `--config scripts/release/perf.tauri.conf.json` (see release.yml).
 #>
 param(
   [Parameter(Mandatory = $true)][string]$App,
@@ -60,7 +61,8 @@ function Invoke-PerfRun([int]$n) {
   $mockProc = Start-Process $Mock -ArgumentList '--port', $mockPort, '--delay-ms', $DelayMs -PassThru -NoNewWindow `
     -RedirectStandardOutput (Join-Path $OutDir "mock-$n.log") -RedirectStandardError (Join-Path $OutDir "mock-$n.err")
   $env:SURVEY_PERF_GEMINI_URL = "http://127.0.0.1:$mockPort"
-  # Keep rendering at full rate even if the runner's desktop hides the window.
+  # The build config (perf.tauri.conf.json) sets the same arguments; the variable covers a
+  # build without it. They keep rendering at full rate even if the runner hides the window.
   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$cdpPort --disable-renderer-backgrounding --disable-background-timer-throttling --disable-backgrounding-occluded-windows"
   $appProc = Start-Process $App -PassThru
   $uiJson = Join-Path $OutDir "ui-$n.json"
@@ -91,6 +93,13 @@ function Invoke-PerfRun([int]$n) {
     Get-Content (Join-Path $OutDir "driver-$n.log") | Write-Host
     if ($driver.ExitCode -ne 0) {
       Get-Content (Join-Path $OutDir "driver-$n.err") | Write-Host
+      Write-Host "WebView2 processes for the app:"
+      WebView2Processes | ForEach-Object { Write-Host "  $($_.ProcessId): $($_.CommandLine)" }
+      Write-Host "All WebView2 processes: $(@(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'").Count)"
+      Write-Host "Listening ports of WebView2 and the app:"
+      $ids = @($appProc.Id) + @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" | ForEach-Object { $_.ProcessId })
+      Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $ids -contains $_.OwningProcess } |
+        ForEach-Object { Write-Host "  $($_.LocalAddress):$($_.LocalPort) pid $($_.OwningProcess)" }
       throw "the UI driver failed in run $n (exit $($driver.ExitCode))"
     }
     # The OS keeps each process's peak working set; use it too, in case a peak fell between samples.
