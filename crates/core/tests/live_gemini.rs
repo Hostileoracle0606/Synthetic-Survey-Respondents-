@@ -422,7 +422,9 @@ async fn live_critic() {
 /// the survey), so Gemini's implicit cache should serve part of the input from the second
 /// call on. The survey is made long enough to pass the model's minimum cacheable prefix
 /// (4,096 tokens for Gemini 3.x Flash). Cache hits are best effort, so up to five calls are
-/// made; the cached-token counts go to the job summary either way.
+/// made, a few seconds apart: back-to-back calls on a cold prefix all missed once, while later
+/// runs hit from the first call, so the cache entry appears shortly after a request. The
+/// cached-token counts go to the job summary either way.
 #[tokio::test]
 #[ignore = "calls the live Gemini API (up to 5 requests)"]
 async fn live_implicit_cache_hits() {
@@ -530,6 +532,9 @@ async fn live_implicit_cache_hits() {
     let mut report = Vec::new();
     let mut hit = false;
     for (i, persona) in people.iter().enumerate() {
+        if i > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        }
         let req = build_request(&model, "Thanks for taking part.", &pairs, persona);
         let resp = c
             .complete_structured(&req)
