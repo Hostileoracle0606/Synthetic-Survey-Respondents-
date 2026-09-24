@@ -7,7 +7,11 @@ import type { Project } from "../types/gen/Project";
 import type { RespondentCard } from "../types/gen/RespondentCard";
 import type { RespondentDetail } from "../types/gen/RespondentDetail";
 import type { RespondentPage } from "../types/gen/RespondentPage";
+import type { CrossTab } from "../types/gen/CrossTab";
+import type { ExportFormat } from "../types/gen/ExportFormat";
 import type { Question } from "../types/gen/Question";
+import type { QuestionReport } from "../types/gen/QuestionReport";
+import type { Report } from "../types/gen/Report";
 import type { QuestionBody } from "../types/gen/QuestionBody";
 import type { RunProgress } from "../types/gen/RunProgress";
 import type { SimulationRun } from "../types/gen/SimulationRun";
@@ -146,8 +150,57 @@ function tickRun(onProgress: (p: RunProgress) => void) {
       clearInterval(runTimer!);
       run = { ...run, status: "completed" };
       onProgress({ kind: "status", status: "completed" });
+      setTimeout(() => { synthesisReady = true; }, 1500);
     }
   }, 250);
+}
+
+let synthesisReady = false;
+
+/** Deterministic fake counts that sum to n. */
+function split(n: number, k: number, salt: number): number[] {
+  const w = Array.from({ length: k }, (_, i) => ((i + 1) * 37 + salt * 11) % 17 + 3);
+  const total = w.reduce((a, b) => a + b, 0);
+  const out = w.map((x) => Math.floor((x / total) * n));
+  out[0] += n - out.reduce((a, b) => a + b, 0);
+  return out;
+}
+const pct = (c: number, n: number) => (n ? Math.round((c / n) * 1000) / 10 : 0);
+
+function questionReport(q: Question, n: number): QuestionReport {
+  const b = q.body;
+  const base: QuestionReport = {
+    questionId: q.id, code: q.code, text: b.text, questionType: b.questionType, chart: "bar", n, invalid: 0, refused: 0,
+    rows: [], mean: null, median: null, q1: null, q3: null, unit: null, themes: [], sampleAnswers: [],
+  };
+  if (b.questionType === "single_choice" || b.questionType === "multi_choice") {
+    const counts = b.questionType === "multi_choice" ? b.options.map((_, i) => Math.round(n * (0.7 - i * 0.12))) : split(n, b.options.length, q.id);
+    return { ...base, chart: b.questionType === "multi_choice" ? "multi_bar" : b.options.length <= 6 ? "pie" : "bar", rows: b.options.map((o, i) => ({ key: o.code, label: o.label, count: counts[i], percent: pct(counts[i], n) })) };
+  }
+  if (b.questionType === "likert" && b.scale) {
+    const k = b.scale.max - b.scale.min + 1;
+    const counts = split(n, k, q.id);
+    const rows = counts.map((c, i) => {
+      const v = b.scale!.min + i;
+      const label = v === b.scale!.min ? `${v} – ${b.scale!.minLabel}` : v === b.scale!.max ? `${v} – ${b.scale!.maxLabel}` : String(v);
+      return { key: String(v), label, count: c, percent: pct(c, n) };
+    });
+    const mean = Math.round((counts.reduce((a, c, i) => a + c * (b.scale!.min + i), 0) / n) * 100) / 100;
+    return { ...base, chart: "diverging", rows, mean };
+  }
+  if (b.questionType === "numeric" && b.numeric) {
+    const counts = split(n, 8, q.id);
+    const w = (b.numeric.max - b.numeric.min) / 8;
+    return {
+      ...base, chart: "histogram", unit: b.numeric.unit || null, median: 900, q1: 600, q3: 1200, mean: 935,
+      rows: counts.map((c, i) => ({ key: String(b.numeric!.min + i * w), label: `${b.numeric!.min + i * w}–${b.numeric!.min + (i + 1) * w}`, count: c, percent: pct(c, n) })),
+    };
+  }
+  const t = [["Price is too high", 0.46], ["Current phone still works", 0.31], ["Waiting for a deal", 0.14]] as const;
+  return {
+    ...base, chart: "themes",
+    themes: t.map(([label, share], i) => ({ id: i + 1, label, description: "Preview theme.", count: Math.round(n * share), percent: Math.round(share * 1000) / 10, quotes: ["Only if my phone breaks.", "They cost too much now."] })),
+  };
 }
 
 export const mock = {
@@ -246,6 +299,49 @@ export const mock = {
     if (runTimer) clearInterval(runTimer);
     run = { ...run!, status: "stopped" };
     runListener?.({ kind: "status", status: "stopped" });
+    setTimeout(() => { synthesisReady = true; }, 1500);
     return structuredClone(run);
   },
+  getReport: async (): Promise<Report> => {
+    const s = ensureSurvey();
+    const n = run?.respondentsDone ?? 0;
+    return {
+      run: structuredClone(run!),
+      basedOnN: n,
+      questions: s.questions.map((q) => questionReport(q, n)),
+      dimensions: [{ key: "age", label: "Age" }, { key: "gender", label: "Gender" }, { key: "region", label: "Region" }, { key: "income", label: "Household income" }],
+      synthesis: synthesisReady
+        ? {
+            summary: "Most respondents keep their phone until it fails, and price is the main reason to wait. Intent to buy in the next year is mixed.",
+            frictionPoints: [{ label: "Price is too high", mentions: Math.round(n * 0.46) }, { label: "Current phone still works", mentions: Math.round(n * 0.31) }],
+            segments: [{ dimension: "age", group: "18–29", takeaway: "Younger respondents mention camera upgrades more often. (low base, n=6)" }],
+            basedOnN: n, model: "gemini-mock-pro", dropped: 1, createdAt: new Date().toISOString(),
+          }
+        : null,
+      synthesisStatus: synthesisReady ? "ready" : "generating",
+      synthesisError: null,
+    };
+  },
+  getCrosstab: async (questionId: number, dimension: string): Promise<CrossTab> => {
+    const s = ensureSurvey();
+    const q = s.questions.find((x) => x.id === questionId)!;
+    const n = run?.respondentsDone ?? 0;
+    const r = questionReport(q, n);
+    const cols = r.themes.length ? r.themes.map((t) => ({ key: String(t.id), label: t.label, count: t.count, percent: t.percent })) : r.chart === "histogram" ? [] : r.rows;
+    const groups = { age: ["18–29", "30–44", "45–59", "60+"], gender: ["Female", "Male"], region: ["Ontario", "Quebec", "British Columbia", "Prairies", "Atlantic"], income: ["Under $50k", "$50k–$100k", "Over $100k"] }[dimension] ?? ["All"];
+    return {
+      questionId, dimension: { key: dimension, label: dimension }, columns: cols,
+      groups: groups.map((label, gi) => {
+        const gn = Math.max(1, Math.round(n / groups.length));
+        const counts = split(gn, Math.max(1, cols.length), gi + questionId);
+        return { label, n: gn, lowBase: gn < 30, cells: cols.map((_, i) => pct(counts[i], gn)), mean: r.mean != null ? Math.round((r.mean + (gi - 1) * 0.3) * 100) / 100 : null };
+      }),
+    };
+  },
+  regenerateSynthesis: async (): Promise<Report> => {
+    synthesisReady = false;
+    setTimeout(() => { synthesisReady = true; }, 1200);
+    return mock.getReport();
+  },
+  exportRun: async (format: ExportFormat): Promise<string | null> => `Downloads/preview-export.${format}`,
 };

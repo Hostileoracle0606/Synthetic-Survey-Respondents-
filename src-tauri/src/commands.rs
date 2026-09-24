@@ -11,13 +11,16 @@ use survey_core::engine::cohort::{self, CohortJob};
 use survey_core::engine::draft::{self, DraftBrief, DraftJob};
 use survey_core::engine::persona::PROMPT_VERSION;
 use survey_core::engine::run::{self as sim, Mode};
+use survey_core::engine::synthesis::{self, SynthesisJob};
 use survey_core::llm::gemini::{newest_stable, GeminiClient};
 use survey_core::llm::LlmProvider;
 use survey_core::model::{
-    Cohort, CohortConfig, CohortProgress, CohortSummary, CountryOption, DraftStatus, Project,
-    Question, QuestionBody, QuotaGroup, RespondentDetail, RespondentPage, RunConfig, RunProgress,
-    RunStatus, SimulationRun, Survey, SurveyInfo,
+    Cohort, CohortConfig, CohortProgress, CohortSummary, CountryOption, CrossTab, DraftStatus,
+    ExportFormat, Project, Question, QuestionBody, QuotaGroup, Report, RespondentDetail,
+    RespondentPage, RunConfig, RunProgress, RunStatus, SimulationRun, Survey, SurveyInfo,
+    SynthesisStatus,
 };
+use survey_core::report::{self, export};
 use survey_core::{sampling, AppError, AppResult, ErrorCode};
 
 use crate::{keychain, AppState};
@@ -339,17 +342,18 @@ pub async fn start_simulation(
             requests_left_today: left,
         },
     )?;
-    launch(&state, client, run.id, on_progress)?;
+    launch(&state, client, run.id, on_progress).await?;
     Ok(run)
 }
 
 /// Starts (or restarts) the engine for a run; it skips respondents already saved.
-fn launch(
+async fn launch(
     state: &State<'_, AppState>,
     client: GeminiClient,
     run_id: i64,
     on_progress: Channel<RunProgress>,
 ) -> AppResult<()> {
+    let synthesis_model = draft_model(state, &client).await?;
     let plan = runs::plan(&*lock(state)?, run_id)?;
     let (tx, rx) = tokio::sync::watch::channel(Mode::Run);
     {
@@ -366,17 +370,138 @@ fn launch(
     let limiter = state.limiter.clone();
     let writer = state.writer.clone();
     let active = state.runs.clone();
+    let db_path = state.db_path.clone();
     tauri::async_runtime::spawn(async move {
         let progress = Arc::new(move |p: RunProgress| {
             let _ = on_progress.send(p);
         });
         // The outcome (completed, paused with a reason, stopped) is stored on the run.
-        let _ = sim::run(plan, llm, limiter, writer, rx, progress).await;
+        let outcome = sim::run(
+            plan,
+            llm.clone(),
+            limiter.clone(),
+            writer.clone(),
+            rx,
+            progress,
+        )
+        .await;
         if let Ok(mut m) = active.lock() {
             m.remove(&run_id);
         }
+        // The report's themes and AI synthesis follow a finished or stopped run.
+        if let Ok(o) = outcome {
+            if matches!(o.status, RunStatus::Completed | RunStatus::Stopped) {
+                let job = SynthesisJob {
+                    run_id,
+                    model: synthesis_model,
+                    db_path,
+                    recode_themes: false,
+                };
+                let _ = synthesis::run(job, llm, limiter, writer).await;
+            }
+        }
     });
     Ok(())
+}
+
+/// Starts theme coding and synthesis in the background; the outcome is stored on the run.
+async fn start_synthesis(
+    state: &State<'_, AppState>,
+    run_id: i64,
+    recode_themes: bool,
+) -> AppResult<()> {
+    let client = gemini()?;
+    let job = SynthesisJob {
+        run_id,
+        model: draft_model(state, &client).await?,
+        db_path: state.db_path.clone(),
+        recode_themes,
+    };
+    let llm: Arc<dyn LlmProvider> = Arc::new(client);
+    let (limiter, writer) = (state.limiter.clone(), state.writer.clone());
+    tauri::async_runtime::spawn(async move {
+        let _ = synthesis::run(job, llm, limiter, writer).await;
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_report(state: State<'_, AppState>, run_id: i64) -> AppResult<Report> {
+    report::report(&*lock(&state)?, run_id)
+}
+
+#[tauri::command]
+pub fn get_crosstab(
+    state: State<'_, AppState>,
+    run_id: i64,
+    question_id: i64,
+    dimension: String,
+) -> AppResult<CrossTab> {
+    report::crosstab(&*lock(&state)?, run_id, question_id, &dimension)
+}
+
+/// Regenerate: a new synthesis from the same numbers and themes.
+#[tauri::command]
+pub async fn regenerate_synthesis(state: State<'_, AppState>, run_id: i64) -> AppResult<Report> {
+    let current = report::report(&*lock(&state)?, run_id)?;
+    if current.synthesis_status == SynthesisStatus::Generating {
+        return Err(AppError::invalid("a synthesis is already being written"));
+    }
+    start_synthesis(&state, run_id, false).await?;
+    report::report(&*lock(&state)?, run_id)
+}
+
+/// Offline export through the system save dialog. Returns the saved path, or None if the
+/// user cancelled. Nothing is uploaded.
+#[tauri::command]
+pub async fn export_run(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    run_id: i64,
+    format: ExportFormat,
+) -> AppResult<Option<String>> {
+    use tauri_plugin_dialog::DialogExt;
+    let (contents, ext, label) = {
+        let conn = lock(&state)?;
+        match format {
+            ExportFormat::Csv => (export::csv(&conn, run_id)?, "csv", "CSV (Excel)"),
+            ExportFormat::Json => (
+                export::pretty(&export::json(&conn, run_id)?),
+                "json",
+                "JSON",
+            ),
+        }
+    };
+    let title = projects::get_project(
+        &*lock(&state)?,
+        runs::get(&*lock(&state)?, run_id)?.project_id,
+    )?
+    .title;
+    let name: String = title
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == ' ' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .add_filter(label, &[ext])
+            .set_file_name(format!("{} - run {run_id}.{ext}", name.trim()))
+            .blocking_save_file()
+    })
+    .await
+    .map_err(|e| AppError::new(ErrorCode::Internal, e.to_string()))?;
+    let Some(path) = picked.and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    std::fs::write(&path, contents)
+        .map_err(|e| AppError::new(ErrorCode::Internal, format!("could not save the file: {e}")))?;
+    Ok(Some(path.display().to_string()))
 }
 
 #[tauri::command]
@@ -415,19 +540,26 @@ pub async fn resume_run(
     if run.status != RunStatus::Paused {
         return Err(AppError::invalid("only a paused run can be resumed"));
     }
-    launch(&state, gemini()?, run_id, on_progress)?;
+    launch(&state, gemini()?, run_id, on_progress).await?;
     runs::get(&*lock(&state)?, run_id)
 }
 
 /// Stop & Save Progress: like pause, then final; the report uses what was answered.
 #[tauri::command]
-pub fn stop_run(state: State<'_, AppState>, run_id: i64) -> AppResult<SimulationRun> {
+pub async fn stop_run(state: State<'_, AppState>, run_id: i64) -> AppResult<SimulationRun> {
     if !signal(&state, run_id, Mode::Stop)? {
-        // Not running (e.g. paused): stop it directly.
-        let conn = lock(&state)?;
-        let run = runs::get(&conn, run_id)?;
-        if matches!(run.status, RunStatus::Paused | RunStatus::Queued) {
-            runs::set_status(&conn, run_id, RunStatus::Stopped, None)?;
+        // Not running (e.g. paused): stop it directly, then write the report's synthesis.
+        let stopped = {
+            let conn = lock(&state)?;
+            let run = runs::get(&conn, run_id)?;
+            let stop = matches!(run.status, RunStatus::Paused | RunStatus::Queued);
+            if stop {
+                runs::set_status(&conn, run_id, RunStatus::Stopped, None)?;
+            }
+            stop
+        };
+        if stopped {
+            start_synthesis(&state, run_id, false).await?;
         }
     }
     runs::get(&*lock(&state)?, run_id)

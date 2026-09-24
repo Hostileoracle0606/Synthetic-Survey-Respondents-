@@ -235,6 +235,7 @@ All are in [`schema.sql`](schema.sql) and were tested in SQLite.
 | `questions` | `review_status` gains `suggested` | AI suggestions sidebar; suggestions stay inactive until added |
 | `simulation_runs` | `status` gains `stopped`; `error` | Stop & Save keeps a reportable partial run; why a run paused itself (bad key, quota spent) |
 | `surveys` | `draft_status` (`none`, `generating`, `ready`, `failed`), `draft_error` | Step 3 shows drafting progress and "Draft failed — retry" |
+| `simulation_runs` | `synthesis_status` (`none`, `generating`, `ready`, `failed`), `synthesis_error` | Step 5 shows theme coding and synthesis progress, and "Couldn't generate — retry" |
 | `llm_calls` | `purpose` gains `suggestion`, `synthesis` | Cost and latency per task |
 | `syntheses` (new) | Stores each AI synthesis with model, prompt version and `based_on_n` | Report screen; reproducibility |
 

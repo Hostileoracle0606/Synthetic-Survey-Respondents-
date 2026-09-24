@@ -29,6 +29,7 @@ pub struct AppState {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -80,6 +81,10 @@ pub fn run() {
             commands::pause_run,
             commands::resume_run,
             commands::stop_run,
+            commands::get_report,
+            commands::get_crosstab,
+            commands::regenerate_synthesis,
+            commands::export_run,
             commands::set_api_key,
             commands::has_api_key,
             commands::delete_api_key,

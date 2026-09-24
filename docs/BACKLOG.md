@@ -30,8 +30,18 @@ As of 2026-09-23. The census population is Canada's (Statistics Canada 2021 Cens
 | B12 | Cost: estimate before a run (`est_cost_usd`) and live cost in Step 4 | Needs the price table from the Settings screen (B1); the card shows "$—" until then | The estimate shows before Run Survey Simulation and cost updates live |
 | B13 | `insta` snapshot tests for the prompts, and the nightly check that Gemini's implicit cache hits (`cached_tokens` > 0) | Prompts are versioned and covered by unit and live tests | Snapshots fail on any unversioned prompt change; the live job reports cache hits |
 | B14 | SPEC §11 performance check: 60 fps and memory limits with 1,000 respondents streaming | Needs the Windows release VMs (M5) | Measured on the M5 VMs within the limits |
-| B15 | SPEC §11 check that no API key appears in the database, logs or exports | Exports arrive in M4; the key only ever lives in the OS keychain | A test searches all three after a run with a known fake key |
+| ~~B15~~ | ~~SPEC §11 check that no API key appears in the database, logs or exports~~ **Done in M4** (`no_api_key_in_the_database_logs_or_exports`) | Exports arrive in M4; the key only ever lives in the OS keychain | A test searches all three after a run with a known fake key |
 | B16 | Edit the survey title and the intro shown to respondents in Step 3 | The draft writes a neutral intro | Both are editable in Step 3 and saved |
+
+## Deferred from M4
+
+| # | Item | Why it can wait | Done when |
+|---|---|---|---|
+| B17 | Edit themes: rename, merge, split or delete a theme and move answers between them (M4 item 3) | Gemini's coding is shown with example quotes, and Regenerate can code again | Edits are saved, counts update, and the synthesis uses the edited themes |
+| B18 | Comparison runs: two runs of the same survey side by side, e.g. a new cohort or seed (SPEC §11, M4 row) | One run per report covers the v1 flow | Step 5 can pick a second run and shows both results for each question |
+| B19 | Open an exported CSV in real Excel on Windows, including non-ASCII text (é, –, CAD) | Unit tests cover the format; Excel only exists on the Windows VMs | Checked on the M5 VMs; any fix is covered by a test |
+| B20 | Live Gemini tests for theme coding and synthesis, in the nightly `live` job | The prompts are covered by `ScriptedLlm` tests; drafting and answering already have live tests | Both run nightly and pass the same checks the app applies |
+| B21 | Show the claims the synthesis checks removed (they're in the JSON export today) | The panel says how many were removed | A "Show removed claims" toggle lists them with the reason |
 
 ## Design changes agreed or proposed but not yet in the docs
 

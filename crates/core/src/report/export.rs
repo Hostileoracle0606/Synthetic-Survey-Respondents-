@@ -10,6 +10,11 @@ use crate::db::{cohorts, projects, runs, surveys};
 use crate::error::AppResult;
 use crate::model::QuestionType;
 
+/// Indented JSON for the export file.
+pub fn pretty(v: &Value) -> String {
+    serde_json::to_string_pretty(v).unwrap_or_default()
+}
+
 /// One CSV cell. Quotes when needed; text that Excel would run as a formula gets a leading
 /// apostrophe (AI-written answers must never execute in a spreadsheet).
 fn cell(s: &str, is_text: bool) -> String {

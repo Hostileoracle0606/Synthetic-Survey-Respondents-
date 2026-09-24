@@ -145,6 +145,20 @@ Exit criteria:
 
 **Exit:** CSV opens correctly in Excel; charts match golden fixtures; synthesis never shows a number that fails the check.
 
+**Status (2026-09-24):** items 1, 2, 4, 5 and 6 are built; item 3 is built except editing themes (BACKLOG B17). Synthesis and theme coding use the newest stable Pro model, falling back to Flash, and start by themselves when a run completes or is stopped. Exports open a native save dialog from Rust, so the window needs no dialog or fs permission. Exit criteria:
+
+- **CSV for Excel:**
+  - Tests check the UTF-8 BOM, CRLF line endings, quoting, one row per respondent, the 0/1 columns and the formula-injection guard.
+  - Opening the file in real Excel is part of the M5 VM checks (B19).
+- **Charts match golden fixtures:**
+  - A 40-respondent fixture with hand-computed numbers covers every question type and the cross-tabs, including low base and stopped runs.
+  - The browser pass on the mock renders every chart type.
+- **Synthesis never shows a failing number:** a claim is dropped and recorded when:
+  - a mention count doesn't equal the coded theme's count;
+  - a segment isn't a real group;
+  - a number isn't one the model was given.
+- **Also closed: SPEC §11 "no API key in database, logs or exports"** (B15). The test runs a simulation, theme coding, synthesis and both exports through the real Gemini client against a mock server, then searches every output for the key.
+
 ## M5 — Validity and release (about 1 week)
 
 1. Fidelity benchmark pack (SPEC §8): Gemini writes candidate questions only; a person writes the attribute rules and freezes `benchmarks/fidelity.v1.json`; the fidelity report runs end to end.

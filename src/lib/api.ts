@@ -17,7 +17,10 @@ import type { Project } from "../types/gen/Project";
 import type { QuotaGroup } from "../types/gen/QuotaGroup";
 import type { RespondentDetail } from "../types/gen/RespondentDetail";
 import type { RespondentPage } from "../types/gen/RespondentPage";
+import type { CrossTab } from "../types/gen/CrossTab";
+import type { ExportFormat } from "../types/gen/ExportFormat";
 import type { Question } from "../types/gen/Question";
+import type { Report } from "../types/gen/Report";
 import type { QuestionBody } from "../types/gen/QuestionBody";
 import type { RunConfig } from "../types/gen/RunConfig";
 import type { RunProgress } from "../types/gen/RunProgress";
@@ -92,6 +95,14 @@ export const api = {
   resumeRun: (runId: number, onProgress: (p: RunProgress) => void): Promise<SimulationRun> =>
     inTauri ? invoke("resume_run", { runId, onProgress: progressChannel<RunProgress>(onProgress) }) : mock.resumeRun(onProgress),
   stopRun: (runId: number): Promise<SimulationRun> => (inTauri ? invoke("stop_run", { runId }) : mock.stopRun()),
+  getReport: (runId: number): Promise<Report> => (inTauri ? invoke("get_report", { runId }) : mock.getReport()),
+  getCrosstab: (runId: number, questionId: number, dimension: string): Promise<CrossTab> =>
+    inTauri ? invoke("get_crosstab", { runId, questionId, dimension }) : mock.getCrosstab(questionId, dimension),
+  regenerateSynthesis: (runId: number): Promise<Report> =>
+    inTauri ? invoke("regenerate_synthesis", { runId }) : mock.regenerateSynthesis(),
+  /** Opens the save dialog; resolves to the saved path, or null if cancelled. */
+  exportRun: (runId: number, format: ExportFormat): Promise<string | null> =>
+    inTauri ? invoke("export_run", { runId, format }) : mock.exportRun(format),
   hasApiKey: (): Promise<boolean> => (inTauri ? invoke("has_api_key") : Promise.resolve(true)),
   setApiKey: (key: string): Promise<void> => (inTauri ? invoke("set_api_key", { key }) : Promise.resolve()),
   testConnection: (): Promise<string[]> => (inTauri ? invoke("test_connection") : Promise.resolve(["gemini-mock-flash"])),
