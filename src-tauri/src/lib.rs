@@ -3,6 +3,8 @@
 
 mod commands;
 mod keychain;
+#[cfg(feature = "perf")]
+mod perf;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -46,11 +48,14 @@ pub fn run() {
                 )
                 .unwrap_or(0);
             let (writer, _handle) = Writer::spawn(survey_core::db::open(&path)?, 50, Duration::from_millis(250));
+            let limits = Limits::default();
+            #[cfg(feature = "perf")]
+            let limits = perf::limits(limits);
             app.manage(AppState {
                 db: Mutex::new(conn),
                 db_path: path,
                 writer,
-                limiter: Arc::new(RateLimiter::new(Limits::default(), used_today)),
+                limiter: Arc::new(RateLimiter::new(limits, used_today)),
                 models: tokio::sync::Mutex::new(None),
                 runs: Arc::new(Mutex::new(HashMap::new())),
             });

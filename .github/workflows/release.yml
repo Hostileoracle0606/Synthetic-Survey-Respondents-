@@ -111,9 +111,45 @@ jobs:
             ./scripts/release/install-smoke.ps1 -Installer $i.FullName
           }
 
+  # TEST_PLAN S7 memory_1000 and S10 stream_fps_1000 (BACKLOG B14) on GitHub's windows-latest:
+  # a performance-harness build (mock Gemini, no key) streams 1,000 respondents x 20 questions
+  # while memory is sampled and frames are recorded. Memory is enforced; frames are warn-only
+  # because these runners have no GPU (TEST_PLAN §6).
+  perf:
+    name: Memory and frame rate, 1,000 respondents streaming
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri icon src-tauri/app-icon.png
+      - run: cargo clippy -p survey-app --features perf -- -D warnings
+      - name: Build the app with the perf harness
+        run: pnpm tauri build --no-bundle --features perf
+        env:
+          VITE_PERF_HARNESS: "1"
+      - run: cargo build --release -p survey-evals --bin mock-gemini --bin perf-seed
+      - name: Stream 1,000 respondents (3 runs, median)
+        shell: pwsh
+        run: ./scripts/release/perf-1000.ps1 -App target/release/survey-app.exe -Mock target/release/mock-gemini.exe -Seed target/release/perf-seed.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-results
+          path: perf-results
+
   publish:
     name: Draft GitHub release
-    needs: [build, install-smoke]
+    needs: [build, install-smoke, perf]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:

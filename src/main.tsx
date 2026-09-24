@@ -9,6 +9,8 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "./styles.css";
 import App from "./App";
 
+if (import.meta.env.VITE_PERF_HARNESS === "1") void import("./lib/perf").then((m) => m.installPerfHooks());
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

@@ -35,6 +35,10 @@ fn lock<'a>(
 }
 
 fn gemini() -> AppResult<GeminiClient> {
+    #[cfg(feature = "perf")]
+    if let Some(client) = crate::perf::mock_client() {
+        return Ok(client);
+    }
     let key = keychain::get()?.ok_or_else(|| AppError::invalid("no Gemini API key stored"))?;
     Ok(GeminiClient::new(key))
 }
@@ -585,6 +589,10 @@ pub fn set_api_key(key: String) -> AppResult<()> {
 
 #[tauri::command]
 pub fn has_api_key() -> AppResult<bool> {
+    #[cfg(feature = "perf")]
+    if crate::perf::mock_client().is_some() {
+        return Ok(true);
+    }
     Ok(keychain::get()?.is_some())
 }
 
