@@ -659,6 +659,147 @@ pub fn score(
     }
 }
 
+/// One question's stability across seeds (TEST_PLAN S13 "run-to-run stability"): the same
+/// cohort and pack, answered again with a different seed, which reshuffles shown option order.
+/// A model that is actually reading the persona should land on close to the same distribution
+/// each time; the largest pairwise TVD across the seeds is flagged at 0.1 or more.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StabilityScore {
+    pub code: String,
+    pub tvd: f64,
+    pub flagged: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StabilityReport {
+    pub pack_version: String,
+    pub model: String,
+    pub seeds: Vec<u64>,
+    pub respondents: u32,
+    pub questions: Vec<StabilityScore>,
+    pub max_tvd: f64,
+    pub stable: bool,
+}
+
+fn observed_distribution(
+    q: &PackQuestion,
+    people: &[&Person],
+    answers: &HashMap<(i64, &str), &BenchAnswer>,
+) -> Option<BTreeMap<String, f64>> {
+    let keys = answer_keys(q);
+    let mut counts: HashMap<String, f64> = HashMap::new();
+    let mut n = 0u32;
+    for p in people {
+        let Some(a) = answers.get(&(p.id, q.code.as_str())) else {
+            continue;
+        };
+        n += 1;
+        *counts.entry(a.key.clone()).or_default() += 1.0;
+    }
+    (n > 0).then(|| distribution(&keys, &counts))
+}
+
+/// Scores stability across 2+ runs of the same pack, cohort and model, one per seed.
+pub fn stability(
+    pack: &Pack,
+    people: &[Person],
+    model: &str,
+    runs: &[(u64, Vec<BenchAnswer>)],
+) -> StabilityReport {
+    let everyone: Vec<&Person> = people.iter().collect();
+    let mut questions = Vec::new();
+    for q in &pack.questions {
+        let dists: Vec<BTreeMap<String, f64>> = runs
+            .iter()
+            .filter_map(|(_, answers)| {
+                let by_key: HashMap<(i64, &str), &BenchAnswer> = answers
+                    .iter()
+                    .map(|a| ((a.person, a.question.as_str()), a))
+                    .collect();
+                observed_distribution(q, &everyone, &by_key)
+            })
+            .collect();
+        if dists.len() < 2 {
+            continue;
+        }
+        let mut max_tvd: f64 = 0.0;
+        for i in 0..dists.len() {
+            for j in (i + 1)..dists.len() {
+                max_tvd = max_tvd.max(tvd(&dists[i], &dists[j]));
+            }
+        }
+        questions.push(StabilityScore {
+            code: q.code.clone(),
+            tvd: round(max_tvd, 4),
+            flagged: max_tvd >= 0.1,
+        });
+    }
+    StabilityReport {
+        pack_version: pack.version.clone(),
+        model: model.into(),
+        seeds: runs.iter().map(|(s, _)| *s).collect(),
+        respondents: people.len() as u32,
+        max_tvd: questions.iter().map(|q| q.tvd).fold(0.0, f64::max),
+        stable: questions.iter().all(|q| !q.flagged),
+        questions,
+    }
+}
+
+/// One question compared between two models (TEST_PLAN S13 "model comparison").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelComparisonRow {
+    pub code: String,
+    pub attribute: String,
+    pub a_tvd: f64,
+    pub b_tvd: f64,
+    pub a_sensitive: Option<bool>,
+    pub b_sensitive: Option<bool>,
+}
+
+/// The default Flash model's fidelity report (`a`) against one other Gemini model (`b`),
+/// side by side, to inform the default model choice. Reported, not pass/fail.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelComparison {
+    pub pack_version: String,
+    pub a_model: String,
+    pub b_model: String,
+    pub a_score: f64,
+    pub b_score: f64,
+    pub a_sensitive_share: f64,
+    pub b_sensitive_share: f64,
+    pub rows: Vec<ModelComparisonRow>,
+}
+
+pub fn compare_models(a: &FidelityReport, b: &FidelityReport) -> ModelComparison {
+    let b_by_code: HashMap<&str, &QuestionScore> =
+        b.questions.iter().map(|q| (q.code.as_str(), q)).collect();
+    let rows = a
+        .questions
+        .iter()
+        .filter_map(|qa| {
+            let qb = b_by_code.get(qa.code.as_str())?;
+            Some(ModelComparisonRow {
+                code: qa.code.clone(),
+                attribute: qa.attribute.clone(),
+                a_tvd: qa.tvd,
+                b_tvd: qb.tvd,
+                a_sensitive: qa.sensitive,
+                b_sensitive: qb.sensitive,
+            })
+        })
+        .collect();
+    ModelComparison {
+        pack_version: a.pack_version.clone(),
+        a_model: a.model.clone(),
+        b_model: b.model.clone(),
+        a_score: a.score,
+        b_score: b.score,
+        a_sensitive_share: a.sensitive_share,
+        b_sensitive_share: b.sensitive_share,
+        rows,
+    }
+}
+
 pub fn read_pack_file(path: &std::path::Path) -> AppResult<Pack> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| AppError::invalid(format!("cannot read {}: {e}", path.display())))?;

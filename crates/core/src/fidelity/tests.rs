@@ -288,3 +288,111 @@ fn candidates_become_a_draft_pack_that_needs_rules() {
     let schema = req.schema.to_string();
     assert!(!schema.contains("expect") && !schema.contains("rule"));
 }
+
+/// Runs the pack once under one seed and returns the raw answers, for building the
+/// `(seed, answers)` pairs `stability` takes.
+async fn run_seed(pk: &Pack, ppl: &[Person], llm: ScriptedLlm, seed: u64) -> Vec<BenchAnswer> {
+    let run = runner::run(pk, ppl, Arc::new(llm), limiter(), "test-flash", seed, 8)
+        .await
+        .unwrap();
+    assert_eq!((run.invalid, run.failed), (0, 0));
+    run.answers
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stability_holds_for_a_model_that_reads_the_persona() {
+    let (pk, ppl) = (pack(), people());
+    let mut runs = Vec::new();
+    for seed in [11u64, 17, 23] {
+        runs.push((
+            seed,
+            run_seed(&pk, &ppl, faithful(pk.clone(), ppl.clone()), seed).await,
+        ));
+    }
+    let report = stability(&pk, &ppl, "test-flash", &runs);
+    assert_eq!(report.seeds, vec![11, 17, 23]);
+    assert!(report.stable, "{report:?}");
+    assert!(report.max_tvd < 0.05, "max_tvd {}", report.max_tvd);
+}
+
+/// `stability` compares aggregate distributions, not individual people, so a genuinely
+/// order-driven model (always the first option shown) still nets out close to stable once
+/// pooled over enough respondents and different shuffles — real instability looks like the
+/// answers themselves moving between runs, which this constructs directly.
+#[test]
+fn stability_flags_a_question_whose_answers_shift_between_seeds() {
+    let pk = pack();
+    let ppl = people();
+    let code = "F01_NEXT_PHONE";
+    let run_a: Vec<BenchAnswer> = ppl
+        .iter()
+        .map(|p| BenchAnswer {
+            person: p.id,
+            question: code.into(),
+            key: "A".into(),
+            position: None,
+        })
+        .collect();
+    let run_b: Vec<BenchAnswer> = ppl
+        .iter()
+        .map(|p| BenchAnswer {
+            person: p.id,
+            question: code.into(),
+            key: "D".into(),
+            position: None,
+        })
+        .collect();
+    let report = stability(&pk, &ppl, "test-flash", &[(11, run_a), (17, run_b)]);
+    let row = report.questions.iter().find(|s| s.code == code).unwrap();
+    assert!(row.flagged, "{row:?}");
+    assert_eq!(row.tvd, 1.0);
+    assert!(!report.stable);
+}
+
+#[test]
+fn stability_holds_when_answers_dont_move_between_seeds() {
+    let pk = pack();
+    let ppl = people();
+    let answers: Vec<BenchAnswer> = pk
+        .questions
+        .iter()
+        .flat_map(|q| {
+            let key = answer_keys(q).first().cloned().unwrap_or_default();
+            ppl.iter().map(move |p| BenchAnswer {
+                person: p.id,
+                question: q.code.clone(),
+                key: key.clone(),
+                position: None,
+            })
+        })
+        .collect();
+    let report = stability(
+        &pk,
+        &ppl,
+        "test-flash",
+        &[(11, answers.clone()), (17, answers.clone()), (23, answers)],
+    );
+    assert!(report.stable, "{report:?}");
+    assert_eq!(report.max_tvd, 0.0);
+    assert_eq!(report.seeds, vec![11, 17, 23]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn model_comparison_reports_two_models_side_by_side() {
+    let (pk, ppl) = (pack(), people());
+    let a = run_seed(&pk, &ppl, faithful(pk.clone(), ppl.clone()), 11).await;
+    let b = run_seed(&pk, &ppl, ignorant(pk.clone()), 11).await;
+    let good = score(&pk, &ppl, &a, ("flash-a", crate::engine::answer::PROMPT_VERSION, 11));
+    let bad = score(&pk, &ppl, &b, ("flash-b", crate::engine::answer::PROMPT_VERSION, 11));
+    let cmp = compare_models(&good, &bad);
+    assert_eq!(cmp.a_model, "flash-a");
+    assert_eq!(cmp.b_model, "flash-b");
+    assert_eq!(cmp.rows.len(), pk.questions.len());
+    assert!(cmp.a_score > cmp.b_score);
+    let f01 = cmp
+        .rows
+        .iter()
+        .find(|r| r.code == "F01_NEXT_PHONE")
+        .unwrap();
+    assert!(f01.a_tvd < f01.b_tvd);
+}

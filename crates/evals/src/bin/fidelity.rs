@@ -3,11 +3,17 @@
 //!   fidelity check <pack.json> [--release]
 //!   fidelity candidates --category mobile_phone [--count 30] [--version fidelity.v2] --out <file>
 //!   fidelity run --pack <pack.json> (--cohort-size 100 | --db <data.db> --cohort <id>)
-//!                [--seed 11] [--concurrency 4] [--release] [--min-score 0] [--out <report.json>]
+//!                [--seed 11 | --seeds 11,17,23] [--compare-model gemini-x] [--concurrency 4]
+//!                [--release] [--min-score 0] [--out <report.json>]
 //!
 //! `candidates` asks Gemini for questions only; a person writes the rules (decision D1).
 //! `run --cohort-size` generates a Canadian census cohort with the app's persona job first.
 //! `--release` refuses packs that are not frozen and reviewed.
+//! `--seeds a,b,c` runs the same cohort under each seed and reports TEST_PLAN S13
+//! "run-to-run stability" (per-question TVD between seeds, flagged at ≥ 0.1); the first seed
+//! is also used to build the cohort and is the one `--min-score` and the printed report use.
+//! `--compare-model` answers the same cohort again with a second model and reports TEST_PLAN
+//! S13 "model comparison" against the primary model, side by side.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -84,9 +90,15 @@ async fn run(args: &[String]) -> Result<(), String> {
     let pack = fidelity::read_pack_file(Path::new(&pack_path)).map_err(err)?;
     let release = args.iter().any(|a| a == "--release");
     fidelity::validate(&pack, release).map_err(|p| p.join("; "))?;
-    let seed: u64 = flag(args, "--seed")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(11);
+    let seeds: Vec<u64> = match flag(args, "--seeds") {
+        Some(list) => list
+            .split(',')
+            .map(|s| s.trim().parse::<u64>().map_err(|_| format!("bad seed {s:?}")))
+            .collect::<Result<_, _>>()?,
+        None => vec![flag(args, "--seed")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(11)],
+    };
     let concurrency: u32 = flag(args, "--concurrency")
         .and_then(|s| s.parse().ok())
         .unwrap_or(4);
@@ -113,7 +125,7 @@ async fn run(args: &[String]) -> Result<(), String> {
             let id = make_cohort(
                 &path,
                 size,
-                seed,
+                seeds[0],
                 pack.category.as_deref(),
                 &flash,
                 llm.clone(),
@@ -126,24 +138,37 @@ async fn run(args: &[String]) -> Result<(), String> {
     };
     let people =
         fidelity::load_people(&survey_core::db::open(&db).map_err(err)?, cohort_id).map_err(err)?;
-    eprintln!(
-        "answering {} questions for {} respondents with {flash}…",
-        pack.questions.len(),
-        people.len()
-    );
-    let bench = runner::run(&pack, &people, llm, lim, &flash, seed, concurrency as usize)
+
+    let mut runs: Vec<(u64, runner::BenchRun)> = Vec::new();
+    for &seed in &seeds {
+        eprintln!(
+            "answering {} questions for {} respondents with {flash} (seed {seed})…",
+            pack.questions.len(),
+            people.len()
+        );
+        let bench = runner::run(
+            &pack,
+            &people,
+            llm.clone(),
+            lim.clone(),
+            &flash,
+            seed,
+            concurrency as usize,
+        )
         .await
         .map_err(err)?;
+        runs.push((seed, bench));
+    }
     let report = fidelity::score(
         &pack,
         &people,
-        &bench.answers,
-        (&flash, survey_core::engine::answer::PROMPT_VERSION, seed),
+        &runs[0].1.answers,
+        (&flash, survey_core::engine::answer::PROMPT_VERSION, seeds[0]),
     );
 
     println!(
-        "Fidelity {} ({} pack {}, {} respondents, model {flash})",
-        report.score, report.pack_status, report.pack_version, report.respondents
+        "Fidelity {} ({} pack {}, {} respondents, model {flash}, seed {})",
+        report.score, report.pack_status, report.pack_version, report.respondents, seeds[0]
     );
     println!(
         "Attribute sensitivity: {}% of questions (target ≥ 80%)",
@@ -169,14 +194,75 @@ async fn run(args: &[String]) -> Result<(), String> {
             if s.flagged { " FLAGGED" } else { "" }
         );
     }
-    println!(
-        "{} invalid answers, {} failed respondents. {}",
-        bench.invalid, bench.failed, report.disclosure
-    );
+    let total_invalid: u32 = runs.iter().map(|(_, b)| b.invalid).sum();
+    let total_failed: u32 = runs.iter().map(|(_, b)| b.failed).sum();
+    println!("{total_invalid} invalid answers, {total_failed} failed respondents. {}", report.disclosure);
+
+    // TEST_PLAN S13 "run-to-run stability": only meaningful with more than one seed.
+    let stability = (runs.len() > 1).then(|| {
+        let by_seed: Vec<(u64, Vec<fidelity::BenchAnswer>)> = runs
+            .iter()
+            .map(|(seed, bench)| (*seed, bench.answers.clone()))
+            .collect();
+        let s = fidelity::stability(&pack, &people, &flash, &by_seed);
+        println!(
+            "\nStability across seeds {:?}: {} (max TVD {:.3}, threshold 0.1)",
+            s.seeds,
+            if s.stable { "stable" } else { "UNSTABLE" },
+            s.max_tvd
+        );
+        for q in s.questions.iter().filter(|q| q.flagged) {
+            println!("  {:<18} TVD {:.3} FLAGGED", q.code, q.tvd);
+        }
+        s
+    });
+
+    // TEST_PLAN S13 "model comparison": only run when a second model is given.
+    let comparison = match flag(args, "--compare-model") {
+        Some(other) => {
+            eprintln!("answering the same cohort with {other} for comparison…");
+            let other_bench = runner::run(
+                &pack,
+                &people,
+                llm.clone(),
+                lim.clone(),
+                &other,
+                seeds[0],
+                concurrency as usize,
+            )
+            .await
+            .map_err(err)?;
+            let other_report = fidelity::score(
+                &pack,
+                &people,
+                &other_bench.answers,
+                (&other, survey_core::engine::answer::PROMPT_VERSION, seeds[0]),
+            );
+            let cmp = fidelity::compare_models(&report, &other_report);
+            println!(
+                "\nModel comparison: {} {} vs {} {} (informs the default model choice, not pass/fail)",
+                cmp.a_model, cmp.a_score, cmp.b_model, cmp.b_score
+            );
+            for row in &cmp.rows {
+                println!(
+                    "  {:<18} {:<18} TVD {:.3} vs {:.3}",
+                    row.code, row.attribute, row.a_tvd, row.b_tvd
+                );
+            }
+            Some(cmp)
+        }
+        None => None,
+    };
+
     if let Some(out) = flag(args, "--out") {
+        let payload = serde_json::json!({
+            "report": report,
+            "stability": stability,
+            "model_comparison": comparison,
+        });
         std::fs::write(
             &out,
-            serde_json::to_string_pretty(&report).unwrap_or_default(),
+            serde_json::to_string_pretty(&payload).unwrap_or_default(),
         )
         .map_err(|e| e.to_string())?;
     }
