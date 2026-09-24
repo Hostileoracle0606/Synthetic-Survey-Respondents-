@@ -3,6 +3,7 @@
 //! stopped run reports on what it has, with n shown everywhere.
 
 pub mod export;
+pub mod validity;
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -29,6 +30,8 @@ pub(crate) struct Answer {
     pub respondent_id: i64,
     pub status: String,
     pub answer: Value,
+    /// Option codes in the order this respondent saw them (choice questions).
+    pub shown: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -90,7 +93,7 @@ pub(crate) fn load(conn: &Connection, run_id: i64) -> AppResult<RunData> {
     }
     let answers = conn
         .prepare(
-            "SELECT id, question_id, respondent_id, status, answer_json FROM responses WHERE run_id = ?1 ORDER BY respondent_id, question_id",
+            "SELECT id, question_id, respondent_id, status, answer_json, shown_options_json FROM responses WHERE run_id = ?1 ORDER BY respondent_id, question_id",
         )?
         .query_map([run_id], |r| {
             let json: Option<String> = r.get(4)?;
@@ -102,6 +105,10 @@ pub(crate) fn load(conn: &Connection, run_id: i64) -> AppResult<RunData> {
                 answer: json
                     .and_then(|j| serde_json::from_str(&j).ok())
                     .unwrap_or(Value::Null),
+                shown: r
+                    .get::<_, Option<String>>(5)?
+                    .and_then(|j| serde_json::from_str(&j).ok())
+                    .unwrap_or_default(),
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -357,7 +364,17 @@ fn question_report(q: &Question, data: &RunData) -> QuestionReport {
             sample_answers = valid.iter().take(5).map(|a| text(a)).collect();
         }
     }
+    let positions: Vec<(usize, usize)> = valid
+        .iter()
+        .filter_map(|a| {
+            let code = a.answer["code"].as_str()?;
+            let pos = a.shown.iter().position(|c| c == code)?;
+            Some((pos, a.shown.len()))
+        })
+        .collect();
+    let validity = validity::check(q, n, &rows, &positions);
     QuestionReport {
+        validity,
         question_id: q.id,
         code: q.code.clone(),
         text: q.body.text.clone(),
@@ -658,6 +675,13 @@ mod tests {
         assert_eq!((why.themes[0].count, why.themes[0].percent), (24, 60.0));
         assert_eq!(why.themes[1].count, 10);
         assert!(why.themes[0].quotes.len() <= 3);
+
+        // Validity: an even 1–5 spread has full entropy and a 20% midpoint; BRAND has no
+        // stored option orders in the fixture, so no order-effect figures.
+        assert_eq!(intent.validity.entropy, Some(1.0));
+        assert_eq!(intent.validity.midpoint_rate, Some(20.0));
+        assert!(intent.validity.flags.is_empty());
+        assert_eq!(brand.validity.first_position_rate, None);
 
         let keys: Vec<&str> = r.dimensions.iter().map(|d| d.key.as_str()).collect();
         assert_eq!(keys, ["age", "gender", "income"]);

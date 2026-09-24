@@ -491,7 +491,7 @@ pub async fn export_run(
         app.dialog()
             .file()
             .add_filter(label, &[ext])
-            .set_file_name(format!("{} - run {run_id}.{ext}", name.trim()))
+            .set_file_name(format!("{} - synthetic run {run_id}.{ext}", name.trim()))
             .blocking_save_file()
     })
     .await

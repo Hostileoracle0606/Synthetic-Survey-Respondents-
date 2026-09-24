@@ -97,7 +97,7 @@ fn kept_respondents(conn: &Connection, cohort_id: i64) -> AppResult<u32> {
 pub fn get(conn: &Connection, id: i64) -> AppResult<SimulationRun> {
     let row = conn
         .query_row(
-            "SELECT r.project_id, r.survey_id, r.cohort_id, r.status, r.model, r.error, r.created_at,
+            "SELECT r.project_id, r.survey_id, r.cohort_id, r.status, r.model, r.error, r.created_at, r.prompt_version,
                 (SELECT COUNT(*) FROM questions q WHERE q.survey_id = r.survey_id AND q.is_active = 1),
                 (SELECT COUNT(*) FROM responses x WHERE x.run_id = r.id),
                 (SELECT COUNT(DISTINCT x.respondent_id) FROM responses x WHERE x.run_id = r.id)
@@ -112,9 +112,10 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<SimulationRun> {
                     r.get::<_, String>(4)?,
                     r.get::<_, Option<String>>(5)?,
                     r.get::<_, String>(6)?,
-                    r.get::<_, u32>(7)?,
                     r.get::<_, u32>(8)?,
                     r.get::<_, u32>(9)?,
+                    r.get::<_, u32>(10)?,
+                    r.get::<_, String>(7)?,
                 ))
             },
         )
@@ -127,6 +128,7 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<SimulationRun> {
         cohort_id: row.2,
         status: RunStatus::from_db(&row.3),
         model: row.4,
+        prompt_version: row.10,
         respondents: kept_respondents(conn, row.2)?,
         questions: row.7,
         answered: row.8,

@@ -505,6 +505,8 @@ pub struct SimulationRun {
     pub cohort_id: i64,
     pub status: RunStatus,
     pub model: String,
+    /// Answering prompt version, shown with the results (SPEC §8 disclosure).
+    pub prompt_version: String,
     pub respondents: u32,
     pub questions: u32,
     /// Stored answers (any status).
@@ -607,6 +609,24 @@ pub struct QuestionReport {
     pub themes: Vec<ThemeSummary>,
     /// Open answers shown while themes are not coded yet (up to 5).
     pub sample_answers: Vec<String>,
+    pub validity: Validity,
+}
+
+/// Label-free checks on a question's answers (docs/SPEC.md §8, TEST_PLAN S13). They need no
+/// expected answers, so they run on every question.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Validity {
+    /// Normalised entropy 0–1 (single choice and scales); low means answers collapsed onto one option.
+    pub entropy: Option<f64>,
+    /// Share (%) choosing the midpoint of an odd scale.
+    pub midpoint_rate: Option<f64>,
+    /// Shuffled single choice: % choosing whatever was shown first, and last.
+    pub first_position_rate: Option<f64>,
+    pub last_position_rate: Option<f64>,
+    /// Plain-language warnings, e.g. "Most respondents chose the midpoint (72%)".
+    pub flags: Vec<String>,
 }
 
 /// A respondent attribute to cross-tabulate by.

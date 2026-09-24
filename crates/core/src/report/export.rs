@@ -227,7 +227,10 @@ pub fn json(conn: &Connection, run_id: i64) -> AppResult<Value> {
         .collect::<Result<_, _>>()?;
     Ok(json!({
         "format": "synthetic-survey-export/1",
-        "disclosure": "Synthetic respondents: every answer was written by an AI model playing a persona. These are not real people.",
+        "disclosure": format!(
+            "Synthetic respondents — directional only; not calibrated against real survey data. Every answer was written by an AI model playing a persona; these are not real people. Model {}, prompt {}.",
+            run.model, run.prompt_version
+        ),
         "project": project,
         "cohort": { "id": cohort.id, "name": cohort.name, "config": cohort.config, "respondents": respondents },
         "survey": { "id": survey.id, "title": survey.title, "intro": survey.intro, "questions": survey.questions, "review": history },

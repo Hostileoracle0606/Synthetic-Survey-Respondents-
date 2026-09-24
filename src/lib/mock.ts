@@ -172,6 +172,7 @@ function questionReport(q: Question, n: number): QuestionReport {
   const base: QuestionReport = {
     questionId: q.id, code: q.code, text: b.text, questionType: b.questionType, chart: "bar", n, invalid: 0, refused: 0,
     rows: [], mean: null, median: null, q1: null, q3: null, unit: null, themes: [], sampleAnswers: [],
+    validity: { entropy: null, midpointRate: null, firstPositionRate: null, lastPositionRate: null, flags: [] },
   };
   if (b.questionType === "single_choice" || b.questionType === "multi_choice") {
     const counts = b.questionType === "multi_choice" ? b.options.map((_, i) => Math.round(n * (0.7 - i * 0.12))) : split(n, b.options.length, q.id);
@@ -186,7 +187,8 @@ function questionReport(q: Question, n: number): QuestionReport {
       return { key: String(v), label, count: c, percent: pct(c, n) };
     });
     const mean = Math.round((counts.reduce((a, c, i) => a + c * (b.scale!.min + i), 0) / n) * 100) / 100;
-    return { ...base, chart: "diverging", rows, mean };
+    const mid = k % 2 ? rows[(k - 1) / 2].percent : null;
+    return { ...base, chart: "diverging", rows, mean, validity: { ...base.validity, entropy: 0.93, midpointRate: mid, flags: mid != null && mid > 60 ? [`Most respondents chose the midpoint (${mid}%), a common sign of model hedging.`] : [] } };
   }
   if (b.questionType === "numeric" && b.numeric) {
     const counts = split(n, 8, q.id);
@@ -280,7 +282,7 @@ export const mock = {
     const s = ensureSurvey();
     if (s.questions.some((x) => x.reviewStatus !== "accepted")) throw { code: "survey_not_approved", message: "Every question must be approved first." };
     s.status = "approved";
-    run = { id: (run?.id ?? 0) + 1, projectId: s.projectId, surveyId: s.id, cohortId: cohort?.id ?? 1, status: "running", model: "gemini-mock-flash", respondents: people.length, questions: s.questions.length, answered: 0, respondentsDone: 0, error: null, createdAt: new Date().toISOString() };
+    run = { id: (run?.id ?? 0) + 1, projectId: s.projectId, surveyId: s.id, cohortId: cohort?.id ?? 1, status: "running", model: "gemini-mock-flash", promptVersion: "answer.v1", respondents: people.length, questions: s.questions.length, answered: 0, respondentsDone: 0, error: null, createdAt: new Date().toISOString() };
     tickRun(onProgress);
     return structuredClone(run);
   },

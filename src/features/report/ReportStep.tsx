@@ -86,6 +86,18 @@ function QuestionCard({ runId, q, dimensions }: { runId: number; q: QuestionRepo
         </span>
       </header>
       <Chart q={q} />
+      {q.validity.flags.length > 0 && (
+        <ul className="m-0 flex list-none flex-col gap-1 rounded-2xl bg-[#faf5e6] p-3 text-sm text-[#5c4a14]" aria-label="Response quality flags">
+          {q.validity.flags.map((f) => <li key={f}>⚠ {f}</li>)}
+        </ul>
+      )}
+      {(q.validity.entropy != null || q.validity.firstPositionRate != null) && (
+        <p className="m-0 text-xs text-muted">
+          {q.validity.entropy != null && `Spread (entropy) ${q.validity.entropy.toFixed(2)} of 1`}
+          {q.validity.midpointRate != null && ` · midpoint ${q.validity.midpointRate}%`}
+          {q.validity.firstPositionRate != null && ` · chose the option shown first ${q.validity.firstPositionRate}%, last ${q.validity.lastPositionRate}%`}
+        </p>
+      )}
       {canBreak && dimensions.length > 0 && (
         <div className="flex flex-col gap-2 border-t border-[#efefea] pt-3">
           <label className="flex items-center gap-2 text-sm text-muted">
@@ -173,14 +185,14 @@ export function ReportStep() {
       footer={<button type="button" className={pillButton} onClick={() => goTo(3)}>Back</button>}
     >
       <div role="note" className="rounded-2xl border border-[#d9cfae] bg-[#faf5e6] px-5 py-3 text-[15px] text-[#5c4a14]">
-        <strong className="font-medium">Synthetic data.</strong> Every answer was written by an AI model playing a persona; these are not real people.
-        Use the results to explore and sharpen hypotheses, not in place of real fieldwork.
+        <strong className="font-medium">Synthetic respondents — directional only; not calibrated against real survey data.</strong> Every answer was written by an AI
+        model playing a persona; these are not real people.{report?.run && ` Model ${report.run.model}, prompt ${report.run.promptVersion}.`}
       </div>
       {error && <div role="alert" className="rounded-2xl border border-[#e7b4a8] bg-[#fbeee9] px-5 py-3 text-[15px] text-[#8a3a26]">{error}</div>}
       {r && (
         <p className="m-0 text-sm text-muted">
           {partial ? `Stopped early: based on ${report!.basedOnN} of ${r.respondents} respondents.` : `Based on ${report!.basedOnN} respondents.`}
-          {` Answered by ${r.model}.`}
+
         </p>
       )}
       {!report && !error && <p className="m-0 text-muted">{runId == null ? "Run a simulation first." : "Loading the report…"}</p>}

@@ -975,6 +975,27 @@ mod tests {
         )));
     }
 
+    /// A model that always picks whatever is shown first is caught by the order-effect check,
+    /// because options were shuffled per respondent and the order was stored.
+    #[tokio::test]
+    async fn always_picking_the_first_option_is_flagged_as_an_order_effect() {
+        let e = env(60, 1);
+        let id = start(&e, 4);
+        let (_tx, rx) = watch::channel(Mode::Run);
+        go(&e, id, &good(), 4, rx).await; // reply_for_prompt always answers option 1
+        let rep = crate::report::report(&e.conn(), id).unwrap();
+        let v = &rep.questions[0].validity;
+        assert_eq!(v.first_position_rate, Some(100.0));
+        assert_eq!(v.last_position_rate, Some(0.0));
+        assert!(
+            v.flags.iter().any(|f| f.starts_with("Order effect")),
+            "{:?}",
+            v.flags
+        );
+        // Shuffling spread the chosen options, so variance alone looks healthy.
+        assert!(v.entropy.unwrap() > 0.8);
+    }
+
     /// SPEC §11: the same run config and seed gives identical option orders.
     #[tokio::test]
     async fn same_seed_gives_the_same_option_orders() {

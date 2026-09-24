@@ -3,6 +3,7 @@ import type { ChartKind } from "./ChartKind";
 import type { QuestionType } from "./QuestionType";
 import type { ReportRow } from "./ReportRow";
 import type { ThemeSummary } from "./ThemeSummary";
+import type { Validity } from "./Validity";
 
 export type QuestionReport = { questionId: number, code: string, text: string, questionType: QuestionType, chart: ChartKind, 
 /**
@@ -12,4 +13,4 @@ n: number, invalid: number, refused: number, rows: Array<ReportRow>, mean: numbe
 /**
  * Open answers shown while themes are not coded yet (up to 5).
  */
-sampleAnswers: Array<string>, };
+sampleAnswers: Array<string>, validity: Validity, };
