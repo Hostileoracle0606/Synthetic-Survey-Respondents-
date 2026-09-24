@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use rusqlite::params;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::call::with_retries;
@@ -22,7 +22,7 @@ pub const PROMPT_VERSION: &str = "survey_draft.v1";
 const SYSTEM: &str = include_str!("../../prompts/survey_draft.v1.md");
 
 /// What the drafter sees: never personas, answers or the cohort.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DraftBrief {
     pub research_type: ResearchType,
     pub product_category: Option<String>,

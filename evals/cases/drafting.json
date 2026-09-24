@@ -1,0 +1,44 @@
+[
+  {
+    "eval": "drafting",
+    "id": "dr-01",
+    "brief": {
+      "research_type": "market_response",
+      "product_category": "mobile_phone",
+      "countries": [
+        "Canada"
+      ],
+      "title": "Smartphone upgrade intent",
+      "objective": "Understand what drives Canadians to replace their smartphone, what they would pay, and what holds them back."
+    },
+    "judge_question": "Is every question neutral (none leading, loaded or double-barrelled), does each serve the stated objective, and does no rationale or intro predict or hint at expected answers? pass = true only if all hold."
+  },
+  {
+    "eval": "drafting",
+    "id": "dr-02",
+    "brief": {
+      "research_type": "brand",
+      "product_category": "tv",
+      "countries": [
+        "Canada"
+      ],
+      "title": "TV brand health",
+      "objective": "Measure awareness and image of TV brands among Canadian households and what drives brand preference."
+    },
+    "judge_question": "Are brands written as placeholders like [Brand A] (none named, since the brief names none), and is every question neutral and single-idea? pass = true only if both hold."
+  },
+  {
+    "eval": "drafting",
+    "id": "dr-03",
+    "brief": {
+      "research_type": "concept",
+      "product_category": "refrigerator",
+      "countries": [
+        "Canada"
+      ],
+      "title": "Smart fridge concept",
+      "objective": "Test a concept: a fridge that tracks food freshness and suggests recipes. We believe families will love it."
+    },
+    "judge_question": "Does the questionnaire avoid adopting the client's belief ('families will love it') in its wording or intro, and avoid questions that assume the respondent likes the concept? pass = true if it stays neutral."
+  }
+]

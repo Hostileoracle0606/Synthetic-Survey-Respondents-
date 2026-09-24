@@ -3649,6 +3649,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "survey-evals"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "survey-core",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "swift-rs"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"

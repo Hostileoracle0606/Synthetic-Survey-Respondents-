@@ -22,8 +22,10 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
-      - run: cargo clippy -p survey-core --all-targets -- -D warnings
-      - run: cargo test -p survey-core
+      - run: cargo clippy -p survey-core -p survey-evals --all-targets -- -D warnings
+      - run: cargo test -p survey-core -p survey-evals
+      - name: Benchmark pack is valid
+        run: cargo run -q -p survey-evals --bin fidelity -- check benchmarks/fidelity.v1.json
       - name: Generated TypeScript types are up to date
         run: git diff --exit-code -- src/types/gen
 
@@ -95,3 +97,16 @@ jobs:
             exit 1
           fi
       - run: cargo test -p survey-core --test live_gemini -- --ignored --test-threads=1
+      # TEST_PLAN S13 smoke: a 100-person Canadian cohort answers the benchmark pack.
+      - name: Fidelity benchmark (smoke)
+        run: cargo run -q --release -p survey-evals --bin fidelity -- run --cohort-size 100 --out fidelity-report.json
+      # TEST_PLAN S12: prompt-behaviour evals with a Gemini judge.
+      - name: Prompt evals
+        run: cargo run -q --release -p survey-evals --bin prompt-evals -- --out evals-results.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-reports
+          path: |
+            fidelity-report.json
+            evals-results.jsonl

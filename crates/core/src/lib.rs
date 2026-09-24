@@ -7,6 +7,7 @@ pub mod countries;
 pub mod db;
 pub mod engine;
 pub mod error;
+pub mod fidelity;
 pub mod llm;
 pub mod model;
 pub mod report;

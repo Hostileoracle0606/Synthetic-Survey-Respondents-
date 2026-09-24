@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "src-tauri"]
+members = ["crates/core", "crates/evals", "src-tauri"]
 # src-tauri needs WebKitGTK on Linux; plain `cargo` commands build only the core.
-default-members = ["crates/core", "src-tauri"]
+default-members = ["crates/core", "crates/evals", "src-tauri"]
 
 [workspace.package]
 edition = "2021"
