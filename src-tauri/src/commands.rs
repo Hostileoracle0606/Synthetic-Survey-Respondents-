@@ -214,29 +214,32 @@ pub fn lock_cohort(state: State<'_, AppState>, cohort_id: i64) -> AppResult<Coho
     cohorts::lock(&*lock(&state)?, cohort_id)
 }
 
+/// What the drafter sees (DATA_FLOW §4): research type, category, countries and objective.
+fn draft_brief(conn: &rusqlite::Connection, project_id: i64) -> AppResult<DraftBrief> {
+    let p = projects::get_project(conn, project_id)?;
+    let research_type = p
+        .research_type
+        .ok_or_else(|| AppError::invalid("choose a research type first"))?;
+    Ok(DraftBrief {
+        research_type,
+        product_category: p.product_category.clone(),
+        countries: p
+            .countries
+            .iter()
+            .map(|c| survey_core::countries::find(c).map_or_else(|| c.clone(), |x| x.name.clone()))
+            .collect(),
+        title: p.title.clone(),
+        objective: p.research_goal.clone(),
+    })
+}
+
 /// Marks the survey `generating` and starts the draft job; the outcome is stored on the survey.
 async fn start_draft(state: &State<'_, AppState>, survey: &Survey) -> AppResult<()> {
     let client = gemini()?;
     let model = draft_model(state, &client).await?;
     let (brief, survey_id) = {
         let conn = lock(state)?;
-        let p = projects::get_project(&conn, survey.project_id)?;
-        let research_type = p
-            .research_type
-            .ok_or_else(|| AppError::invalid("choose a research type first"))?;
-        let brief = DraftBrief {
-            research_type,
-            product_category: p.product_category.clone(),
-            countries: p
-                .countries
-                .iter()
-                .map(|c| {
-                    survey_core::countries::find(c).map_or_else(|| c.clone(), |x| x.name.clone())
-                })
-                .collect(),
-            title: p.title.clone(),
-            objective: p.research_goal.clone(),
-        };
+        let brief = draft_brief(&conn, survey.project_id)?;
         surveys::set_generation(
             &conn,
             survey.id,
@@ -280,6 +283,37 @@ pub async fn redraft_survey(state: State<'_, AppState>, project_id: i64) -> AppR
     }
     start_draft(&state, &survey).await?;
     surveys::get(&*lock(&state)?, survey.id)
+}
+
+/// Suggest more: one Gemini call adds new suggestions to the sidebar, leaving out any that
+/// repeat a question or suggestion the survey already has. The critic then checks them.
+#[tauri::command]
+pub async fn suggest_more(state: State<'_, AppState>, survey_id: i64) -> AppResult<Survey> {
+    let client = gemini()?;
+    let model = draft_model(&state, &client).await?;
+    let (brief, existing) = {
+        let conn = lock(&state)?;
+        let survey = surveys::get(&conn, survey_id)?;
+        if survey.draft_status == DraftStatus::Generating {
+            return Err(AppError::invalid("wait for the draft to finish"));
+        }
+        (
+            draft_brief(&conn, survey.project_id)?,
+            surveys::all_texts(&conn, survey_id)?,
+        )
+    };
+    let job = DraftJob {
+        survey_id,
+        brief,
+        model,
+    };
+    let llm: Arc<dyn LlmProvider> = Arc::new(client);
+    let targets = draft::suggest_more(&job, &llm, &state.limiter, &state.writer, existing).await?;
+    let (limiter, writer) = (state.limiter.clone(), state.writer.clone());
+    tauri::async_runtime::spawn(async move {
+        let _ = critic::run(targets, job.model, llm, limiter, writer).await;
+    });
+    surveys::get(&*lock(&state)?, survey_id)
 }
 
 /// Step 3: the survey title and the intro respondents see before the first question.

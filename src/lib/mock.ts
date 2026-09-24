@@ -88,6 +88,15 @@ const SUGGESTED: [string, QuestionBody][] = [
   ["S2_CARRIER", { text: "How satisfied are you with your mobile carrier?", questionType: "likert", options: [], randomize: false, maxChoices: null, scale: { min: 1, max: 5, minLabel: "Very dissatisfied", maxLabel: "Very satisfied" }, numeric: null }],
 ];
 
+/** What the mock's "Suggest more" hands out, a few at a time, skipping any already present. */
+const MORE: [string, QuestionBody][] = [
+  ["S3_PAY", { text: "How do you usually pay for a new phone?", questionType: "single_choice", options: opts(["Outright", "Carrier plan", "Financing", "Other"]), randomize: true, maxChoices: null, scale: null, numeric: null }],
+  ["S4_REFURB", { text: "Would you consider a refurbished phone?", questionType: "likert", options: [], randomize: false, maxChoices: null, scale: { min: 1, max: 5, minLabel: "Definitely not", maxLabel: "Definitely" }, numeric: null }],
+  ["S5_SOURCE", { text: "Where do you look for information before buying a phone?", questionType: "multi_choice", options: opts(["Reviews", "Friends", "Store staff", "Social media"]), randomize: true, maxChoices: 2, scale: null, numeric: null }],
+  ["S6_KEEP", { text: "How many years do you expect to keep your next phone?", questionType: "numeric", options: [], randomize: false, maxChoices: null, scale: null, numeric: { min: 0, max: 10, unit: "years" } }],
+  ["S7_TRADEIN", { text: "Would a trade-in offer change when you upgrade?", questionType: "single_choice", options: opts(["Yes, sooner", "No difference", "Not sure"]), randomize: true, maxChoices: null, scale: null, numeric: null }],
+];
+
 let survey: Survey | null = null;
 let nextId = 100;
 let run: SimulationRun | null = null;
@@ -310,6 +319,15 @@ export const mock = {
     const sug = s.suggestions.find((x) => x.id === id)!;
     s.suggestions = s.suggestions.filter((x) => x.id !== id);
     s.questions.push({ ...sug, isActive: true, reviewStatus: "pending" });
+    return structuredClone(s);
+  },
+  suggestMore: async (): Promise<Survey> => {
+    const s = ensureSurvey();
+    await new Promise((r) => setTimeout(r, 600));
+    const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+    const have = new Set([...s.questions, ...s.suggestions].map((x) => words(x.body.text)));
+    const fresh = MORE.filter(([, b]) => !have.has(words(b.text))).slice(0, 3);
+    s.suggestions.push(...fresh.map(([c, b]) => checkLater(q(c, b, false))));
     return structuredClone(s);
   },
   startSimulation: async (onProgress: (p: RunProgress) => void): Promise<SimulationRun> => {

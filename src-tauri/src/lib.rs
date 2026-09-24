@@ -78,6 +78,7 @@ pub fn run() {
             commands::delete_question,
             commands::approve_question,
             commands::add_suggestion,
+            commands::suggest_more,
             commands::start_simulation,
             commands::get_latest_run,
             commands::pause_run,

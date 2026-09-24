@@ -344,6 +344,15 @@ fn unique_code(conn: &Connection, survey_id: i64, wanted: &str) -> AppResult<Str
     unreachable!()
 }
 
+/// The text of every question the survey has, active, suggested or retired; "Suggest more"
+/// shows it to Gemini and removes duplicates of it.
+pub fn all_texts(conn: &Connection, survey_id: i64) -> AppResult<Vec<String>> {
+    Ok(conn
+        .prepare("SELECT question_text FROM questions WHERE survey_id = ?1 ORDER BY order_index")?
+        .query_map([survey_id], |r| r.get(0))?
+        .collect::<Result<_, _>>()?)
+}
+
 /// A drafted question, as saved by the draft job.
 pub struct NewQuestion {
     pub code: String,

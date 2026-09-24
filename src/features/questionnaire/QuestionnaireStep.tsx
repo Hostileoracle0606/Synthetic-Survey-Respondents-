@@ -218,6 +218,20 @@ export function QuestionnaireStep() {
     if (!survey) return;
     setSurvey(await api.updateSurveyText(survey.id, title, intro));
   });
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestNote, setSuggestNote] = useState("");
+  const suggestMore = async () => {
+    if (!survey) return;
+    setSuggestNote("");
+    setSuggesting(true);
+    const before = survey.suggestions.length;
+    const s = await act(() => api.suggestMore(survey.id));
+    setSuggesting(false);
+    if (!s) return;
+    setSurvey(s);
+    const added = s.suggestions.length - before;
+    setSuggestNote(added > 0 ? `${added} new suggestion${added === 1 ? "" : "s"} added.` : "Gemini only repeated questions you already have. Try again later, or write your own with + New.");
+  };
   const redraft = () => act(async () => {
     if (projectId == null) return;
     setSurvey(await api.redraftSurvey(projectId));
@@ -469,9 +483,16 @@ export function QuestionnaireStep() {
 
         {/* Suggestions */}
         <aside aria-label="AI suggestions" className="flex flex-col gap-3">
-          <h2 className="m-0 font-display text-lg font-semibold">AI suggestions</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="m-0 font-display text-lg font-semibold">AI suggestions</h2>
+            <button type="button" className={smallButton} onClick={suggestMore} disabled={busy || generating || !survey} title="Ask Gemini for more ideas; repeats of your questions are left out">
+              {suggesting ? "Suggesting…" : "Suggest more"}
+            </button>
+          </div>
           <p className="m-0 text-sm text-muted">Optional extras from the draft. Added questions still need your approval.</p>
-          {survey?.suggestions.length === 0 && !generating && <p className="m-0 text-sm text-muted">No suggestions left.</p>}
+          {suggesting && <p className="m-0 text-sm text-muted" role="status">Gemini is writing new suggestions…</p>}
+          {suggestNote && !suggesting && <p className="m-0 text-sm text-muted" role="status">{suggestNote}</p>}
+          {survey?.suggestions.length === 0 && !generating && !suggesting && <p className="m-0 text-sm text-muted">No suggestions left.</p>}
           {survey?.suggestions.map((s) => (
             <div key={s.id} className="flex flex-col gap-2 rounded-2xl border border-line bg-white px-4 py-3">
               <span className="text-[15px]">{s.body.text}</span>

@@ -89,6 +89,8 @@ export const api = {
     inTauri ? invoke("approve_question", { questionId }) : mock.approveQuestion(questionId),
   addSuggestion: (questionId: number): Promise<Survey> =>
     inTauri ? invoke("add_suggestion", { questionId }) : mock.addSuggestion(questionId),
+  suggestMore: (surveyId: number): Promise<Survey> =>
+    inTauri ? invoke("suggest_more", { surveyId }) : mock.suggestMore(),
   startSimulation: (projectId: number, config: RunConfig, onProgress: (p: RunProgress) => void): Promise<SimulationRun> =>
     inTauri
       ? invoke("start_simulation", { projectId, config, onProgress: progressChannel<RunProgress>(onProgress) })
