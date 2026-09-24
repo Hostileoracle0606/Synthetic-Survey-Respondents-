@@ -6,6 +6,12 @@ name: Release
 on:
   push:
     tags: ["v*"]
+    branches: ["**"]
+    # Branch pushes run only when the pipeline itself changes (paths are not checked for tags),
+    # to exercise it without publishing.
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/release/**"
   workflow_dispatch:
 
 permissions:
