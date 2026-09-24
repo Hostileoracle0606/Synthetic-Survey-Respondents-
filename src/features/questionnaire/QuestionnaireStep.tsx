@@ -11,6 +11,8 @@ import type { Survey } from "../../types/gen/Survey";
 import { AppShell } from "../../components/AppShell";
 import { Arrow, pillButton, primaryButton } from "../../components/fields";
 import { moveBefore, sameOrder } from "../../lib/reorder";
+import { tokens, usd } from "../../lib/cost";
+import type { CostEstimate } from "../../types/gen/CostEstimate";
 
 const TYPES: [QuestionType, string][] = [
   ["single_choice", "Single choice"],
@@ -272,6 +274,24 @@ export function QuestionnaireStep() {
     reach(3);
   });
 
+  // Cost of the run the button would start; refreshed when the questions change.
+  const [estimate, setEstimate] = useState<CostEstimate | null>(null);
+  const questionKey = survey ? JSON.stringify([survey.intro, survey.questions.map((q) => [q.id, q.body])]) : "";
+  useEffect(() => {
+    if (projectId == null || !survey || survey.questions.length === 0) {
+      setEstimate(null);
+      return;
+    }
+    let live = true;
+    const t = setTimeout(() => {
+      api.estimateRun(projectId).then((e) => live && setEstimate(e)).catch(() => live && setEstimate(null));
+    }, 400);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [projectId, questionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const heading = useMemo(() => {
     if (generating) return "Gemini is drafting the questionnaire…";
     return `${approved} of ${total} approved`;
@@ -287,6 +307,15 @@ export function QuestionnaireStep() {
           <button type="button" className={pillButton} onClick={() => goTo(1)}>Back</button>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted" role="status">{heading}</span>
+            {estimate && (
+              <span
+                className="text-sm text-muted"
+                data-testid="cost-estimate"
+                title={`${estimate.model}: ${tokens(estimate.inputTokens)} input and about ${tokens(estimate.outputTokens)} output tokens${estimate.outputFromHistory ? " (output from earlier runs)" : ""}. Cache hits make it cheaper.`}
+              >
+                Est. {estimate.costUsd != null ? `≈ ${usd(estimate.costUsd)}` : "cost unknown"} · {estimate.calls.toLocaleString()} calls
+              </span>
+            )}
             <button type="button" className={primaryButton} disabled={!canRun || busy} onClick={startRun} title={canRun ? "" : "Approve every question first"}>
               Run Survey Simulation <Arrow />
             </button>

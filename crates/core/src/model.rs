@@ -535,6 +535,25 @@ pub struct RunConfig {
     pub seed: Option<u64>,
 }
 
+/// Shown before Run Survey Simulation (SPEC §5 "Cost estimate").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CostEstimate {
+    /// The answering model the run would use.
+    pub model: String,
+    /// One whole-survey call per respondent.
+    pub calls: u32,
+    #[ts(type = "number")]
+    pub input_tokens: u64,
+    #[ts(type = "number")]
+    pub output_tokens: u64,
+    /// None when the model has no price (not a known Gemini tier and none saved).
+    pub cost_usd: Option<f64>,
+    /// True when output tokens come from earlier runs on this model rather than a rule of thumb.
+    pub output_from_history: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -559,6 +578,10 @@ pub struct SimulationRun {
     /// Why the run paused or failed, e.g. an invalid key.
     pub error: Option<String>,
     pub created_at: String,
+    /// Estimated when the run started; None without a price for the model.
+    pub est_cost_usd: Option<f64>,
+    /// Actual cost of the run's calls so far, from their token counts.
+    pub cost_usd: Option<f64>,
 }
 
 impl RunStatus {

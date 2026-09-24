@@ -13,4 +13,12 @@ answered: number, respondentsDone: number,
 /**
  * Why the run paused or failed, e.g. an invalid key.
  */
-error: string | null, createdAt: string, };
+error: string | null, createdAt: string, 
+/**
+ * Estimated when the run started; None without a price for the model.
+ */
+estCostUsd: number | null, 
+/**
+ * Actual cost of the run's calls so far, from their token counts.
+ */
+costUsd: number | null, };

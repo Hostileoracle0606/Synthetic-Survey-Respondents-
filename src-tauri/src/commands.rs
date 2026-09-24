@@ -16,11 +16,12 @@ use survey_core::engine::synthesis::{self, SynthesisJob};
 use survey_core::llm::gemini::{drafting_model, newest_stable, GeminiClient};
 use survey_core::llm::LlmProvider;
 use survey_core::model::{
-    Cohort, CohortConfig, CohortProgress, CohortSummary, CountryOption, CrossTab, DraftStatus,
-    ExportFormat, Project, Question, QuestionBody, QuotaGroup, Report, RespondentDetail,
-    RespondentPage, RunConfig, RunProgress, RunStatus, SimulationRun, Survey, SurveyInfo,
-    SynthesisStatus,
+    Cohort, CohortConfig, CohortProgress, CohortSummary, CostEstimate, CountryOption, CrossTab,
+    DraftStatus, ExportFormat, Project, Question, QuestionBody, QuotaGroup, Report,
+    RespondentDetail, RespondentPage, RunConfig, RunProgress, RunStatus, SimulationRun, Survey,
+    SurveyInfo, SynthesisStatus,
 };
+use survey_core::pricing::{self, ModelPrice};
 use survey_core::report::{self, export};
 use survey_core::{sampling, AppError, AppResult, ErrorCode};
 
@@ -401,6 +402,28 @@ pub fn add_suggestion(state: State<'_, AppState>, question_id: i64) -> AppResult
     surveys::add_suggestion(&*lock(&state)?, question_id)
 }
 
+/// Shown before Run Survey Simulation: calls, tokens and cost for the answering model.
+#[tauri::command]
+pub async fn estimate_run(state: State<'_, AppState>, project_id: i64) -> AppResult<CostEstimate> {
+    let model = flash_model(&state, &gemini()?).await?;
+    runs::estimate(&*lock(&state)?, project_id, &model)
+}
+
+/// The price table: saved prices plus starting prices for the models the key can use.
+#[tauri::command]
+pub async fn get_prices(state: State<'_, AppState>) -> AppResult<Vec<ModelPrice>> {
+    let models = match gemini() {
+        Ok(client) => models(&state, &client).await.unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+    pricing::table(&*lock(&state)?, &models)
+}
+
+#[tauri::command]
+pub fn set_price(state: State<'_, AppState>, price: ModelPrice) -> AppResult<ModelPrice> {
+    pricing::set_price(&*lock(&state)?, price)
+}
+
 /// Run Survey Simulation: approves the survey and creates the run in one transaction (the
 /// database refuses it if any question is unreviewed), then starts answering.
 #[tauri::command]
@@ -416,16 +439,21 @@ pub async fn start_simulation(
     let left = limits
         .requests_per_day
         .saturating_sub(state.limiter.used_today().await);
-    let run = runs::start(
-        &*lock(&state)?,
-        project_id,
-        &config,
-        &runs::RunSettings {
-            model: &model,
-            max_concurrency: limits.max_concurrency,
-            requests_left_today: left,
-        },
-    )?;
+    let run = {
+        let conn = lock(&state)?;
+        let est_cost_usd = runs::estimate(&conn, project_id, &model)?.cost_usd;
+        runs::start(
+            &conn,
+            project_id,
+            &config,
+            &runs::RunSettings {
+                model: &model,
+                max_concurrency: limits.max_concurrency,
+                requests_left_today: left,
+                est_cost_usd,
+            },
+        )?
+    };
     if let Err(e) = launch(&state, client, run.id, on_progress).await {
         // Don't leave a queued run behind: it would block every later start.
         runs::set_status(&*lock(&state)?, run.id, RunStatus::Failed, Some(&e.message))?;

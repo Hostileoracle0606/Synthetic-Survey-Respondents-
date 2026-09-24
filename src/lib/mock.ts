@@ -7,7 +7,9 @@ import type { Project } from "../types/gen/Project";
 import type { RespondentCard } from "../types/gen/RespondentCard";
 import type { RespondentDetail } from "../types/gen/RespondentDetail";
 import type { RespondentPage } from "../types/gen/RespondentPage";
+import type { CostEstimate } from "../types/gen/CostEstimate";
 import type { CrossTab } from "../types/gen/CrossTab";
+import type { ModelPrice } from "../types/gen/ModelPrice";
 import type { ExportFormat } from "../types/gen/ExportFormat";
 import type { Critique } from "../types/gen/Critique";
 import type { Question } from "../types/gen/Question";
@@ -97,6 +99,11 @@ const MORE: [string, QuestionBody][] = [
   ["S7_TRADEIN", { text: "Would a trade-in offer change when you upgrade?", questionType: "single_choice", options: opts(["Yes, sooner", "No difference", "Not sure"]), randomize: true, maxChoices: null, scale: null, numeric: null }],
 ];
 
+/** Starting price for the mock's Flash model, as survey-core's `default_price` gives it. */
+let flashPrice: ModelPrice = { model: "gemini-mock-flash", inputPerMillion: 0.5, cachedInputPerMillion: 0.05, outputPerMillion: 3, saved: false };
+const costOf = (input: number, output: number) => (input * flashPrice.inputPerMillion + output * flashPrice.outputPerMillion) / 1e6;
+let runCost = 0;
+
 let survey: Survey | null = null;
 let nextId = 100;
 let run: SimulationRun | null = null;
@@ -178,8 +185,9 @@ function tickRun(onProgress: (p: RunProgress) => void) {
         consoleLines.push({ at: String(Date.now()), respondent: p.ordinal, question: qq.code, answer: pick?.label ?? (value != null ? String(value) : "Only if my phone breaks."), reason: "Preview answer." });
       }
     }
-    run = { ...run, respondentsDone: end, answered: end * s.questions.length };
-    onProgress({ kind: "batch", answered: run.answered, totalAnswers: total, respondentsDone: end, costUsd: null, avgLatencyMs: 4200, p95LatencyMs: 7900, answersPerMin: 12 * s.questions.length * 3, concurrency: 4, deltas, console: consoleLines.slice(-20) });
+    runCost += costOf(2600 * (end - start), (300 + 45 * s.questions.length) * (end - start));
+    run = { ...run, respondentsDone: end, answered: end * s.questions.length, costUsd: runCost };
+    onProgress({ kind: "batch", answered: run.answered, totalAnswers: total, respondentsDone: end, costUsd: runCost, avgLatencyMs: 4200, p95LatencyMs: 7900, answersPerMin: 12 * s.questions.length * 3, concurrency: 4, deltas, console: consoleLines.slice(-20) });
     if (end >= people.length) {
       clearInterval(runTimer!);
       run = { ...run, status: "completed" };
@@ -330,11 +338,25 @@ export const mock = {
     s.suggestions.push(...fresh.map(([c, b]) => checkLater(q(c, b, false))));
     return structuredClone(s);
   },
+  estimateRun: async (): Promise<CostEstimate> => {
+    const s = ensureSurvey();
+    const calls = people.length;
+    const inputTokens = calls * 2600;
+    const outputTokens = calls * (300 + s.questions.reduce((a, x) => a + (x.body.questionType === "open_ended" ? 100 : 45), 0));
+    return { model: flashPrice.model, calls, inputTokens, outputTokens, costUsd: costOf(inputTokens, outputTokens), outputFromHistory: false };
+  },
+  getPrices: async (): Promise<ModelPrice[]> => [flashPrice],
+  setPrice: async (p: ModelPrice): Promise<ModelPrice> => {
+    flashPrice = { ...p, saved: true };
+    return flashPrice;
+  },
   startSimulation: async (onProgress: (p: RunProgress) => void): Promise<SimulationRun> => {
     const s = ensureSurvey();
     if (s.questions.some((x) => x.reviewStatus !== "accepted")) throw { code: "survey_not_approved", message: "Every question must be approved first." };
     s.status = "approved";
-    run = { id: (run?.id ?? 0) + 1, projectId: s.projectId, surveyId: s.id, cohortId: cohort?.id ?? 1, status: "running", model: "gemini-mock-flash", promptVersion: "answer.v2", respondents: people.length, questions: s.questions.length, answered: 0, respondentsDone: 0, error: null, createdAt: new Date().toISOString() };
+    runCost = 0;
+    const est = await mock.estimateRun();
+    run = { id: (run?.id ?? 0) + 1, projectId: s.projectId, surveyId: s.id, cohortId: cohort?.id ?? 1, status: "running", model: "gemini-mock-flash", promptVersion: "answer.v2", respondents: people.length, questions: s.questions.length, answered: 0, respondentsDone: 0, error: null, createdAt: new Date().toISOString(), estCostUsd: est.costUsd, costUsd: 0 };
     tickRun(onProgress);
     return structuredClone(run);
   },

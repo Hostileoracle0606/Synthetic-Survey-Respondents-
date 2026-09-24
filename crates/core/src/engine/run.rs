@@ -21,6 +21,7 @@ use crate::db::writer::Writer;
 use crate::error::AppResult;
 use crate::llm::{LlmError, LlmProvider, StructuredRequest, Usage};
 use crate::model::{AnswerDelta, ConsoleLine, EventLevel, Question, RunProgress, RunStatus};
+use crate::pricing::{self, ModelPrice};
 
 /// What the run should be doing; the UI's Pause and Stop buttons change it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +48,8 @@ enum Update {
     Done {
         answers: u32,
         latency_ms: Option<u32>,
+        /// Tokens of every successful call for this respondent, for the live cost.
+        usage: Usage,
         deltas: Vec<AnswerDelta>,
         console: Vec<ConsoleLine>,
     },
@@ -105,6 +108,8 @@ pub async fn run(
         answered: plan.answered,
         respondents_done: plan.respondents_done,
         total_answers: plan.respondents_total * plan.questions.len() as u32,
+        price: plan.price.clone(),
+        cost_usd: plan.cost_so_far,
     };
     let aggregator = tokio::spawn(aggregate(rx, totals, adaptive.clone(), progress.clone()));
     let ctx = Arc::new(Ctx {
@@ -214,10 +219,20 @@ async fn respondent(ctx: &Ctx, r: &PlannedRespondent) -> Result<(), Halt> {
                     },
                 })
                 .collect();
-            return save(ctx, r, None, answers, Vec::new(), Vec::new()).await;
+            return save(
+                ctx,
+                r,
+                None,
+                Usage::default(),
+                answers,
+                Vec::new(),
+                Vec::new(),
+            )
+            .await;
         }
         Reply::Got { json, call } => (check_reply(&pairs, &json), call),
     };
+    let mut extra = Usage::default();
     let problems: Vec<String> = results.iter().filter_map(|x| x.clone().err()).collect();
     if !problems.is_empty() {
         req.prompt.push_str(&format!(
@@ -230,6 +245,11 @@ async fn respondent(ctx: &Ctx, r: &PlannedRespondent) -> Result<(), Halt> {
                 if old.is_err() && new.is_ok() {
                     *old = new;
                 }
+            }
+            if let (Some(first), Some(_)) = (call, c2) {
+                // The answers are saved with the repair call; the first one is billed too.
+                log_extra_call(ctx, r.id, first);
+                extra = add_usage(extra, first.1);
             }
             call = c2.or(call);
         }
@@ -279,13 +299,22 @@ async fn respondent(ctx: &Ctx, r: &PlannedRespondent) -> Result<(), Halt> {
             outcome,
         });
     }
-    save(ctx, r, call, answers, deltas, console).await
+    save(ctx, r, call, extra, answers, deltas, console).await
+}
+
+fn add_usage(a: Usage, b: Usage) -> Usage {
+    Usage {
+        input_tokens: a.input_tokens + b.input_tokens,
+        cached_tokens: a.cached_tokens + b.cached_tokens,
+        output_tokens: a.output_tokens + b.output_tokens,
+    }
 }
 
 async fn save(
     ctx: &Ctx,
     r: &PlannedRespondent,
     call: Option<(u32, Usage, u64)>,
+    extra: Usage,
     answers: Vec<SavedAnswer>,
     deltas: Vec<AnswerDelta>,
     console: Vec<ConsoleLine>,
@@ -301,6 +330,7 @@ async fn save(
     let _ = ctx.updates.send(Update::Done {
         answers: n,
         latency_ms: call.map(|(_, _, l)| l as u32),
+        usage: add_usage(extra, call.map(|(_, u, _)| u).unwrap_or_default()),
         deltas,
         console,
     });
@@ -399,6 +429,20 @@ fn log_failed(ctx: &Ctx, respondent_id: i64, attempt: u32, e: &LlmError) {
     }));
 }
 
+/// A successful call whose answers were replaced by the repair call's; logged so the run's
+/// cost (and the daily count) includes it.
+fn log_extra_call(ctx: &Ctx, respondent_id: i64, (attempt, u, latency): (u32, Usage, u64)) {
+    let run_id = ctx.plan.run_id;
+    let _ = ctx.writer.send(Box::new(move |c| {
+        c.execute(
+            "INSERT INTO llm_calls(run_id, respondent_id, purpose, attempt, input_tokens, cached_tokens, output_tokens, latency_ms)
+             VALUES (?1, ?2, 'answer', ?3, ?4, ?5, ?6, ?7)",
+            params![run_id, respondent_id, attempt, u.input_tokens, u.cached_tokens, u.output_tokens, latency as i64],
+        )?;
+        Ok(())
+    }));
+}
+
 /// Milliseconds since the Unix epoch, as text; the UI formats it in local time.
 fn now_ms() -> String {
     SystemTime::now()
@@ -411,6 +455,8 @@ struct Totals {
     answered: u32,
     respondents_done: u32,
     total_answers: u32,
+    price: Option<ModelPrice>,
+    cost_usd: f64,
 }
 
 /// Collects updates and sends one `Batch` per `FLUSH_EVERY` at most; events go straight out.
@@ -431,8 +477,11 @@ async fn aggregate(
     loop {
         let open = tokio::select! {
             u = rx.recv() => match u {
-                Some(Update::Done { answers, latency_ms, deltas: d, console: c }) => {
+                Some(Update::Done { answers, latency_ms, usage, deltas: d, console: c }) => {
                     t.answered += answers;
+                    if let Some(p) = &t.price {
+                        t.cost_usd += pricing::cost(p, &usage);
+                    }
                     t.respondents_done += 1;
                     latencies.extend(latency_ms);
                     recent.push_back((Instant::now(), answers));
@@ -467,7 +516,7 @@ async fn aggregate(
                 answered: t.answered,
                 total_answers: t.total_answers,
                 respondents_done: t.respondents_done,
-                cost_usd: None,
+                cost_usd: t.price.as_ref().map(|_| t.cost_usd),
                 avg_latency_ms: avg,
                 p95_latency_ms: p95,
                 answers_per_min: recent.iter().map(|(_, n)| n).sum(),
@@ -626,6 +675,7 @@ mod tests {
             model: "flash",
             max_concurrency: conc,
             requests_left_today: 100_000,
+            est_cost_usd: None,
         }
     }
 
@@ -708,6 +758,7 @@ mod tests {
             model: "flash",
             max_concurrency: 4,
             requests_left_today: 5,
+            est_cost_usd: Some(0.5),
         };
         let err = runs::start(&e.conn(), 1, &RunConfig { seed: None }, &s)
             .err()
@@ -929,6 +980,78 @@ mod tests {
         assert_eq!(
             e.count("SELECT COUNT(*) FROM responses WHERE status = 'valid'"),
             12
+        );
+    }
+
+    #[tokio::test]
+    async fn the_estimate_and_live_cost_use_the_price_table_and_every_call() {
+        let e = env(6, 3);
+        let before = runs::estimate(&e.conn(), 1, "flash").unwrap();
+        assert_eq!(before.calls, 6);
+        assert!(before.input_tokens > 6 * 200, "{before:?}");
+        assert!(!before.output_from_history);
+        assert!(before.cost_usd.unwrap() > 0.0);
+        assert!(runs::estimate(&e.conn(), 1, "no-such-model")
+            .unwrap()
+            .cost_usd
+            .is_none());
+
+        let s = RunSettings {
+            est_cost_usd: before.cost_usd,
+            ..settings(2)
+        };
+        let id = runs::start(&e.conn(), 1, &RunConfig { seed: None }, &s)
+            .unwrap()
+            .id;
+        // Leaves out Q2 every time, so each respondent costs two calls.
+        let llm = ScriptedLlm::new(|req, _| {
+            let mut v = reply_for_prompt(&req.prompt);
+            v.as_object_mut().unwrap().remove("Q2");
+            Ok(v)
+        });
+        let (_tx, rx) = watch::channel(Mode::Run);
+        let (out, seen) = go(&e, id, &llm, 2, rx).await;
+        assert_eq!(out.status, RunStatus::Completed);
+        // Both calls per respondent are logged, so the stored cost covers the repairs.
+        assert_eq!(
+            e.count("SELECT COUNT(*) FROM llm_calls WHERE purpose = 'answer' AND output_tokens IS NOT NULL"),
+            12
+        );
+        let live = seen
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .find_map(|p| match p {
+                RunProgress::Batch { cost_usd, .. } => *cost_usd,
+                _ => None,
+            })
+            .unwrap();
+        let run = runs::get(&e.conn(), id).unwrap();
+        assert!(
+            (run.cost_usd.unwrap() - live).abs() < 1e-9,
+            "{run:?} vs {live}"
+        );
+        assert_eq!(run.est_cost_usd, before.cost_usd);
+        let price = crate::pricing::default_price("flash").unwrap();
+        let tokens: (i64, i64) = e
+            .conn()
+            .query_row(
+                "SELECT SUM(input_tokens), SUM(output_tokens) FROM llm_calls WHERE run_id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        let expected = (tokens.0 as f64 * price.input_per_million
+            + tokens.1 as f64 * price.output_per_million)
+            / 1e6;
+        assert!((live - expected).abs() < 1e-9);
+
+        // Later estimates for this model use the output it really produced.
+        assert!(
+            runs::estimate(&e.conn(), 1, "flash")
+                .unwrap()
+                .output_from_history
         );
     }
 

@@ -17,7 +17,9 @@ import type { Project } from "../types/gen/Project";
 import type { QuotaGroup } from "../types/gen/QuotaGroup";
 import type { RespondentDetail } from "../types/gen/RespondentDetail";
 import type { RespondentPage } from "../types/gen/RespondentPage";
+import type { CostEstimate } from "../types/gen/CostEstimate";
 import type { CrossTab } from "../types/gen/CrossTab";
+import type { ModelPrice } from "../types/gen/ModelPrice";
 import type { ExportFormat } from "../types/gen/ExportFormat";
 import type { Question } from "../types/gen/Question";
 import type { Report } from "../types/gen/Report";
@@ -91,6 +93,10 @@ export const api = {
     inTauri ? invoke("add_suggestion", { questionId }) : mock.addSuggestion(questionId),
   suggestMore: (surveyId: number): Promise<Survey> =>
     inTauri ? invoke("suggest_more", { surveyId }) : mock.suggestMore(),
+  estimateRun: (projectId: number): Promise<CostEstimate> =>
+    inTauri ? invoke("estimate_run", { projectId }) : mock.estimateRun(),
+  getPrices: (): Promise<ModelPrice[]> => (inTauri ? invoke("get_prices") : mock.getPrices()),
+  setPrice: (price: ModelPrice): Promise<ModelPrice> => (inTauri ? invoke("set_price", { price }) : mock.setPrice(price)),
   startSimulation: (projectId: number, config: RunConfig, onProgress: (p: RunProgress) => void): Promise<SimulationRun> =>
     inTauri
       ? invoke("start_simulation", { projectId, config, onProgress: progressChannel<RunProgress>(onProgress) })

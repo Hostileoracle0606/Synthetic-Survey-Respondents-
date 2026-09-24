@@ -131,6 +131,7 @@ async fn thousand_by_twenty_stays_within_the_rust_memory_budget() {
             model: "flash",
             max_concurrency: 10,
             requests_left_today: 10_000,
+            est_cost_usd: None,
         },
     )
     .unwrap()
