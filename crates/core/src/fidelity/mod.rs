@@ -77,7 +77,8 @@ pub struct Case {
     pub expect: BTreeMap<String, f64>,
 }
 
-/// One test on one attribute. Exactly one of `eq`, `one_of`, `min`/`max`, `contains`.
+/// One test on one attribute. Exactly one of `eq`, `one_of`, `min`/`max`, `contains`,
+/// `contains_any`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Condition {
     pub attribute: String,
@@ -92,6 +93,11 @@ pub struct Condition {
     /// For list attributes (biases, values): case-insensitive substring of any item.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub contains: Option<String>,
+    /// Like `contains`, but matching any of several phrasings: biases and values are
+    /// free text the persona model writes to its own wording (`persona.v1.md` gives examples,
+    /// not a fixed vocabulary), so a rule tied to one exact phrase misses close synonyms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contains_any: Option<Vec<String>>,
 }
 
 /// Persona attributes a rule may read.
@@ -153,6 +159,14 @@ impl Condition {
             return match v {
                 Value::Array(items) => items.iter().any(|i| text(i).contains(&needle)),
                 other => text(other).contains(&needle),
+            };
+        }
+        if let Some(needles) = &self.contains_any {
+            let needles: Vec<String> = needles.iter().map(|n| n.to_lowercase()).collect();
+            let hits = |t: &str| needles.iter().any(|n| t.contains(n.as_str()));
+            return match v {
+                Value::Array(items) => items.iter().any(|i| hits(&text(i))),
+                other => hits(&text(other)),
             };
         }
         if self.min.is_some() || self.max.is_some() {

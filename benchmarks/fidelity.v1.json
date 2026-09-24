@@ -97,7 +97,7 @@
           {
             "when": {
               "attribute": "biases",
-              "contains": "early adopter"
+              "contains_any": ["early adopter", "novelty", "innovator", "new tech", "first to try", "trendsetter", "fomo"]
             },
             "expect": {
               "3": 0.1,
@@ -218,7 +218,7 @@
           {
             "when": {
               "attribute": "biases",
-              "contains": "brand-loyal"
+              "contains_any": ["brand-loyal", "brand loyal", "brand loyalty", "loyal to", "sticks with", "brand-conscious"]
             },
             "expect": {
               "A": 0.6,

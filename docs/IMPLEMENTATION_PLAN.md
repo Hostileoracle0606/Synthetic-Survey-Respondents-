@@ -179,7 +179,7 @@ Live results, all with gemini-3.8-flash; drafting also picks Flash, because the 
 - **Fidelity smoke, end to end:**
   - a live 100-person Canadian cohort answered the draft pack: 0 invalid answers, 0 failures;
   - fidelity 72.9;
-  - attribute sensitivity 60% of questions, against an 80% target. The pack's draft rules need review before freezing (B22); F02's rule matches a bias label Gemini's personas don't use.
+  - attribute sensitivity 60% of questions, against an 80% target. F02 and F04 tied their rule to one exact bias phrase ("early adopter", "brand-loyal"); biases are free text (`persona.v1.md` gives examples, not a fixed vocabulary), so a live cohort's personas often word it differently and the rule missed them. Both rules now use `contains_any` with several likely phrasings (`fidelity::Condition.contains_any`); re-running the live smoke test would confirm the improvement. The pack's draft rules still need a person's review before freezing (B22).
 - **Prompt evals:**
 
   | Eval | Pass rate |

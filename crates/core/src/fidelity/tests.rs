@@ -210,6 +210,10 @@ fn conditions_and_distances() {
     assert!(c(json!({"attribute": "region", "one_of": ["Quebec", "Ontario"]})).matches(p));
     assert!(c(json!({"attribute": "biases", "contains": "early"})).matches(p));
     assert!(!c(json!({"attribute": "missing", "eq": 1})).matches(p));
+    // contains_any: any of several phrasings, since biases are free text (persona.v1.md gives
+    // examples, not a fixed vocabulary) and a rule tied to one exact phrase misses synonyms.
+    assert!(c(json!({"attribute": "biases", "contains_any": ["novelty", "early adopter"]})).matches(p));
+    assert!(!c(json!({"attribute": "biases", "contains_any": ["brand-loyal", "status quo"]})).matches(p));
     let a: BTreeMap<String, f64> = [("A".into(), 0.5), ("B".into(), 0.5)].into();
     let b: BTreeMap<String, f64> = [("A".into(), 1.0)].into();
     assert_eq!(tvd(&a, &a), 0.0);
