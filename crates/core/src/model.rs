@@ -103,6 +103,15 @@ pub struct CohortConfig {
     pub seed: u64,
     pub quotas: Vec<QuotaGroup>,
     pub screening: String,
+    /// Percentage (0-100) of respondents drawn as non-binary, applied on top of the census
+    /// or synthetic gender draw (BACKLOG B7). 0 keeps the binary census/quota draw as is.
+    /// Mutually exclusive with a "gender" quota group.
+    #[serde(default)]
+    pub non_binary_share: u8,
+    /// Target Countries at the moment this cohort was generated, so Step 2 can tell the user
+    /// their Step 1 audience has drifted (BACKLOG B4). Not user-editable directly.
+    #[serde(default)]
+    pub countries: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -729,4 +738,61 @@ pub struct CrossTab {
 pub enum ExportFormat {
     Csv,
     Json,
+}
+
+/// Gemini's per-project rate-limit tier (BACKLOG B1); sets the [`crate::engine::limiter::Limits`]
+/// the rate limiter uses. Picked by the user in Settings since Gemini has no API to read it back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, Default)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum UsageTier {
+    #[default]
+    Free,
+    Tier1,
+    Tier2,
+    Tier3,
+}
+
+impl UsageTier {
+    pub fn as_db(self) -> &'static str {
+        match self {
+            Self::Free => "free",
+            Self::Tier1 => "tier1",
+            Self::Tier2 => "tier2",
+            Self::Tier3 => "tier3",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Option<Self> {
+        match s {
+            "free" => Some(Self::Free),
+            "tier1" => Some(Self::Tier1),
+            "tier2" => Some(Self::Tier2),
+            "tier3" => Some(Self::Tier3),
+            _ => None,
+        }
+    }
+}
+
+/// USD per 1,000,000 tokens, as published on the Gemini pricing page. The user copies these in;
+/// the app has no way to read them back from a key.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ModelPrice {
+    pub input_usd_per_million: f64,
+    pub output_usd_per_million: f64,
+}
+
+/// Settings screen (BACKLOG B1): everything but the API key itself, which stays in the OS
+/// keychain. `null` model IDs mean "pick automatically" (newest stable Flash / Pro).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Settings {
+    pub flash_model: Option<String>,
+    pub pro_model: Option<String>,
+    pub usage_tier: UsageTier,
+    pub flash_price: Option<ModelPrice>,
+    pub pro_price: Option<ModelPrice>,
 }

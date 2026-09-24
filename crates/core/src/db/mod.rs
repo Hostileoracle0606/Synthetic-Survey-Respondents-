@@ -4,6 +4,7 @@
 pub mod cohorts;
 pub mod projects;
 pub mod runs;
+pub mod settings;
 pub mod surveys;
 pub mod writer;
 

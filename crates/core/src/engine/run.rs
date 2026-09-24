@@ -20,7 +20,9 @@ use crate::db::runs::{self, Outcome, PlannedRespondent, RunPlan, SavedAnswer};
 use crate::db::writer::Writer;
 use crate::error::AppResult;
 use crate::llm::{LlmError, LlmProvider, StructuredRequest, Usage};
-use crate::model::{AnswerDelta, ConsoleLine, EventLevel, Question, RunProgress, RunStatus};
+use crate::model::{
+    AnswerDelta, ConsoleLine, EventLevel, ModelPrice, Question, RunProgress, RunStatus,
+};
 
 /// What the run should be doing; the UI's Pause and Stop buttons change it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +49,7 @@ enum Update {
     Done {
         answers: u32,
         latency_ms: Option<u32>,
+        usage: Option<Usage>,
         deltas: Vec<AnswerDelta>,
         console: Vec<ConsoleLine>,
     },
@@ -105,8 +108,17 @@ pub async fn run(
         answered: plan.answered,
         respondents_done: plan.respondents_done,
         total_answers: plan.respondents_total * plan.questions.len() as u32,
+        input_tokens: 0,
+        output_tokens: 0,
     };
-    let aggregator = tokio::spawn(aggregate(rx, totals, adaptive.clone(), progress.clone()));
+    let price = plan.price;
+    let aggregator = tokio::spawn(aggregate(
+        rx,
+        totals,
+        adaptive.clone(),
+        progress.clone(),
+        price,
+    ));
     let ctx = Arc::new(Ctx {
         plan,
         llm,
@@ -301,6 +313,7 @@ async fn save(
     let _ = ctx.updates.send(Update::Done {
         answers: n,
         latency_ms: call.map(|(_, _, l)| l as u32),
+        usage: call.map(|(_, u, _)| u),
         deltas,
         console,
     });
@@ -411,14 +424,19 @@ struct Totals {
     answered: u32,
     respondents_done: u32,
     total_answers: u32,
+    input_tokens: u64,
+    output_tokens: u64,
 }
 
 /// Collects updates and sends one `Batch` per `FLUSH_EVERY` at most; events go straight out.
+/// `price` (BACKLOG B1, from Settings) turns the running token totals into a live USD estimate;
+/// it stays `None` (shown as "$—") until the user fills in the Gemini price table.
 async fn aggregate(
     mut rx: mpsc::UnboundedReceiver<Update>,
     mut t: Totals,
     adaptive: Arc<AdaptiveConcurrency>,
     progress: ProgressFn,
+    price: Option<ModelPrice>,
 ) {
     let mut latencies: Vec<u32> = Vec::new();
     let mut recent: VecDeque<(Instant, u32)> = VecDeque::new();
@@ -431,11 +449,15 @@ async fn aggregate(
     loop {
         let open = tokio::select! {
             u = rx.recv() => match u {
-                Some(Update::Done { answers, latency_ms, deltas: d, console: c }) => {
+                Some(Update::Done { answers, latency_ms, usage, deltas: d, console: c }) => {
                     t.answered += answers;
                     t.respondents_done += 1;
                     latencies.extend(latency_ms);
                     recent.push_back((Instant::now(), answers));
+                    if let Some(u) = usage {
+                        t.input_tokens += u64::from(u.input_tokens);
+                        t.output_tokens += u64::from(u.output_tokens);
+                    }
                     deltas.extend(d);
                     console.extend(c);
                     while console.len() > CONSOLE_PER_MESSAGE {
@@ -463,11 +485,15 @@ async fn aggregate(
                 recent.pop_front();
             }
             let (avg, p95) = latency_stats(&latencies);
+            let cost_usd = price.map(|p| {
+                (t.input_tokens as f64 / 1e6) * p.input_usd_per_million
+                    + (t.output_tokens as f64 / 1e6) * p.output_usd_per_million
+            });
             progress(RunProgress::Batch {
                 answered: t.answered,
                 total_answers: t.total_answers,
                 respondents_done: t.respondents_done,
-                cost_usd: None,
+                cost_usd,
                 avg_latency_ms: avg,
                 p95_latency_ms: p95,
                 answers_per_min: recent.iter().map(|(_, n)| n).sum(),
@@ -583,6 +609,8 @@ mod tests {
                     .collect(),
             }],
             screening: String::new(),
+            non_binary_share: 0,
+            countries: vec!["CA".into()],
         };
         let cohort = cohorts::create(&conn, 1, &config, None, "flash", PROMPT_VERSION).unwrap();
         let skels = Sampler::new(&config, &["CA".into()])
@@ -1034,7 +1062,14 @@ mod tests {
             .message
             .contains("survey changed"));
 
-        // Launch recovery unsticks background jobs left generating.
+        // Launch recovery unsticks background jobs left generating. Synthesis only ever runs
+        // on a finished run (a stuck synthesis on a still-paused one can't happen for real),
+        // so move it there before checking the report, which now requires a finished run.
+        conn.execute(
+            "UPDATE simulation_runs SET status = 'stopped' WHERE id = ?1",
+            [id],
+        )
+        .unwrap();
         conn.execute_batch(
             "UPDATE surveys SET draft_status = 'generating'; UPDATE simulation_runs SET synthesis_status = 'generating';",
         )

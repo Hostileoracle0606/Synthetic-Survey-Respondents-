@@ -48,7 +48,9 @@ pub fn run() {
                 )
                 .unwrap_or(0);
             let (writer, _handle) = Writer::spawn(survey_core::db::open(&path)?, 50, Duration::from_millis(250));
-            let limits = Limits::default();
+            // The saved Gemini usage tier (BACKLOG B1, Free by default); a tier change in
+            // Settings takes effect the next time the app launches.
+            let limits = Limits::for_tier(survey_core::db::settings::get(&conn)?.usage_tier);
             #[cfg(feature = "perf")]
             let limits = perf::limits(limits);
             app.manage(AppState {
@@ -66,6 +68,7 @@ pub fn run() {
             commands::default_quotas,
             commands::save_survey_info,
             commands::get_project,
+            commands::get_last_project,
             commands::generate_cohort,
             commands::regenerate_cohort,
             commands::get_latest_cohort,
@@ -94,6 +97,8 @@ pub fn run() {
             commands::has_api_key,
             commands::delete_api_key,
             commands::test_connection,
+            commands::get_settings,
+            commands::save_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Synthetic Survey app");
