@@ -11,15 +11,27 @@ import { CATEGORICAL, NEUTRAL, SERIES, divergingColours } from "./palette";
 
 const fmt = (p: number) => `${p % 1 === 0 ? p.toFixed(0) : p.toFixed(1)}%`;
 
+/** Distribution mode (SPEC §8, BACKLOG B23): Gemini's average predicted probability for this
+ *  option, next to the sampled count, when the run recorded one. */
+function AvgProb({ row }: { row: ReportRow }) {
+  return (
+    <span className="w-16 text-right text-xs text-muted" title="Average probability Gemini assigned this option (distribution mode)">
+      {row.avgProb != null ? `≈${fmt(row.avgProb)}` : "—"}
+    </span>
+  );
+}
+
 function Legend({ rows, colours }: { rows: ReportRow[]; colours: string[] }) {
+  const showProbs = rows.some((r) => r.avgProb != null);
   return (
     <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-sm">
       {rows.map((r, i) => (
-        <li key={r.key} className="grid grid-cols-[12px_1fr_auto_auto] items-center gap-2">
+        <li key={r.key} className={`grid items-center gap-2 ${showProbs ? "grid-cols-[12px_1fr_auto_auto_auto]" : "grid-cols-[12px_1fr_auto_auto]"}`}>
           <span className="h-3 w-3 rounded-[3px]" style={{ background: colours[i] }} aria-hidden />
           <span className="truncate" title={r.label}>{r.label}</span>
           <span className="font-mono text-xs text-muted">{r.count}</span>
           <span className="w-12 text-right font-medium">{fmt(r.percent)}</span>
+          {showProbs && <AvgProb row={r} />}
         </li>
       ))}
     </ul>
@@ -29,15 +41,22 @@ function Legend({ rows, colours }: { rows: ReportRow[]; colours: string[] }) {
 /** Horizontal bars, one hue; the % sits at the end of each bar. */
 export function Bars({ rows, note }: { rows: ReportRow[]; note?: string }) {
   const top = Math.max(1, ...rows.map((r) => r.percent));
+  const showProbs = rows.some((r) => r.avgProb != null);
   return (
     <div className="flex flex-col gap-1.5">
+      {showProbs && <p className="m-0 text-xs text-muted">Sampled % · avg. probability (distribution mode)</p>}
       {rows.map((r) => (
-        <div key={r.key} className="grid grid-cols-[minmax(120px,34%)_1fr_52px] items-center gap-3 text-sm" title={`${r.label}: ${r.count} (${fmt(r.percent)})`}>
+        <div
+          key={r.key}
+          className={`grid items-center gap-3 text-sm ${showProbs ? "grid-cols-[minmax(120px,30%)_1fr_52px_64px]" : "grid-cols-[minmax(120px,34%)_1fr_52px]"}`}
+          title={`${r.label}: ${r.count} (${fmt(r.percent)})`}
+        >
           <span className="truncate" title={r.label}>{r.label}</span>
           <span className="h-3.5">
             <span className="block h-3.5 rounded-r-[4px]" style={{ width: `${(r.percent / top) * 100}%`, minWidth: r.count ? 2 : 0, background: SERIES }} />
           </span>
           <span className="text-right font-medium">{fmt(r.percent)}</span>
+          {showProbs && <AvgProb row={r} />}
         </div>
       ))}
       {note && <p className="m-0 mt-1 text-xs text-muted">{note}</p>}
@@ -149,7 +168,7 @@ export function Themes({ themes, samples, n }: { themes: ThemeSummary[]; samples
   }
   return (
     <div className="flex flex-col gap-3">
-      <Bars rows={themes.map((t) => ({ key: String(t.id), label: t.label, count: t.count, percent: t.percent }))}
+      <Bars rows={themes.map((t) => ({ key: String(t.id), label: t.label, count: t.count, percent: t.percent, avgProb: null }))}
         note={`An answer can carry more than one theme, so shares can total more than 100% (n = ${n}).`} />
       <details className="text-sm">
         <summary className="cursor-pointer text-muted">Example answers</summary>

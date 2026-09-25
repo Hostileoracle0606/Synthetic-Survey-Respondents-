@@ -266,10 +266,22 @@ export function QuestionnaireStep() {
     }
     endDrag();
   };
+  // Distribution mode (SPEC §8, BACKLOG B23): hidden until the answering model is confirmed
+  // to return log-probabilities.
+  const [logprobsSupported, setLogprobsSupported] = useState(false);
+  const [logprobs, setLogprobs] = useState(false);
+  useEffect(() => {
+    let live = true;
+    api.probeLogprobs().then((ok) => live && setLogprobsSupported(ok)).catch(() => live && setLogprobsSupported(false));
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const startRun = () => act(async () => {
     if (projectId == null) return;
     run.reset();
-    const r = await api.startSimulation(projectId, { seed: null }, run.apply);
+    const r = await api.startSimulation(projectId, { seed: null, logprobs: logprobsSupported && logprobs }, run.apply);
     run.setRun(r);
     reach(3);
   });
@@ -307,6 +319,11 @@ export function QuestionnaireStep() {
           <button type="button" className={pillButton} onClick={() => goTo(1)}>Back</button>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted" role="status">{heading}</span>
+            {logprobsSupported && (
+              <label className="flex items-center gap-2 text-sm text-muted" title="Record each option's probability for single-choice questions (one extra call per question, per respondent).">
+                <input type="checkbox" checked={logprobs} onChange={(e) => setLogprobs(e.target.checked)} /> Distribution mode
+              </label>
+            )}
             {estimate && (
               <span
                 className="text-sm text-muted"

@@ -61,6 +61,9 @@ pub(crate) struct Answer {
     pub answer: Parsed,
     /// Option codes in the order this respondent saw them (choice questions).
     pub shown: Vec<String>,
+    /// Distribution mode (SPEC §8, BACKLOG B23): this option's probability per code, when the
+    /// run recorded one for this single-choice answer.
+    pub option_probs: Option<BTreeMap<String, f64>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -139,7 +142,7 @@ pub(crate) fn load(conn: &Connection, run_id: i64) -> AppResult<RunData> {
     }
     let answers = conn
         .prepare(
-            "SELECT id, question_id, respondent_id, status, answer_json, shown_options_json FROM responses WHERE run_id = ?1 ORDER BY respondent_id, question_id",
+            "SELECT id, question_id, respondent_id, status, answer_json, shown_options_json, option_probs_json FROM responses WHERE run_id = ?1 ORDER BY respondent_id, question_id",
         )?
         .query_map([run_id], |r| {
             let json: Option<String> = r.get(4)?;
@@ -153,6 +156,9 @@ pub(crate) fn load(conn: &Connection, run_id: i64) -> AppResult<RunData> {
                     .get::<_, Option<String>>(5)?
                     .and_then(|j| serde_json::from_str(&j).ok())
                     .unwrap_or_default(),
+                option_probs: r
+                    .get::<_, Option<String>>(6)?
+                    .and_then(|j| serde_json::from_str(&j).ok()),
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -316,15 +322,29 @@ fn question_report(q: &Question, data: &RunData) -> QuestionReport {
             *counts.entry(k).or_default() += 1;
         }
     }
+    // Distribution mode (SPEC §8, BACKLOG B23): respondents this run probed for this
+    // single-choice question. A missing key in one respondent's distribution counts as 0 for
+    // them, not as unprobed, so the average is over every probed respondent, not just those
+    // whose top alternates happened to include that option.
+    let probed: Vec<&BTreeMap<String, f64>> = if q.body.question_type == QuestionType::SingleChoice {
+        valid.iter().filter_map(|a| a.option_probs.as_ref()).collect()
+    } else {
+        Vec::new()
+    };
     let mut rows: Vec<ReportRow> = columns(q, data)
         .into_iter()
         .map(|(key, label)| {
             let c = counts.get(&key).copied().unwrap_or(0);
+            let avg_prob = (!probed.is_empty()).then(|| {
+                let sum: f64 = probed.iter().map(|p| p.get(&key).copied().unwrap_or(0.0)).sum();
+                (sum / probed.len() as f64 * 1000.0).round() / 10.0
+            });
             ReportRow {
                 key,
                 label,
                 count: c,
                 percent: pct(c, n),
+                avg_prob,
             }
         })
         .collect();
@@ -363,6 +383,7 @@ fn question_report(q: &Question, data: &RunData) -> QuestionReport {
                     label: format!("{}–{}", fmt_num(lo), fmt_num(hi)),
                     count: c,
                     percent: pct(c, n),
+                    avg_prob: None,
                 }
             })
             .collect();
@@ -597,6 +618,7 @@ pub(crate) fn crosstab_from(
                     percent: row.map_or(0.0, |r| r.percent),
                     key,
                     label,
+                    avg_prob: row.and_then(|r| r.avg_prob),
                 }
             })
             .collect(),
@@ -713,6 +735,36 @@ mod tests {
 
         let keys: Vec<&str> = r.dimensions.iter().map(|d| d.key.as_str()).collect();
         assert_eq!(keys, ["age", "gender", "income"]);
+    }
+
+    /// Distribution mode (SPEC §8, BACKLOG B23): the average is over every respondent this
+    /// run probed for the question, not just the ones whose top alternates included a given
+    /// option — an option absent from one respondent's distribution counts as 0 for them.
+    #[test]
+    fn distribution_mode_average_probability_is_reported_next_to_counts() {
+        let f = Fixture::build();
+        let brand = f.q("BRAND");
+        f.conn
+            .execute(
+                "UPDATE responses SET option_probs_json = ?1 WHERE run_id = ?2 AND question_id = ?3 AND respondent_id = 1",
+                params![r#"{"A":0.9,"B":0.1}"#, f.run_id, brand],
+            )
+            .unwrap();
+        f.conn
+            .execute(
+                "UPDATE responses SET option_probs_json = ?1 WHERE run_id = ?2 AND question_id = ?3 AND respondent_id = 2",
+                params![r#"{"A":0.7,"C":0.3}"#, f.run_id, brand],
+            )
+            .unwrap();
+        let r = report(&f.conn, f.run_id).unwrap();
+        let q = r.questions.iter().find(|q| q.code == "BRAND").unwrap();
+        let row = |k: &str| q.rows.iter().find(|r| r.key == k).unwrap();
+        assert_eq!(row("A").avg_prob, Some(80.0));
+        assert_eq!(row("B").avg_prob, Some(5.0));
+        assert_eq!(row("C").avg_prob, Some(15.0));
+        // A question this run never probed stays None on every row.
+        let intent = r.questions.iter().find(|q| q.code == "INTENT").unwrap();
+        assert!(intent.rows.iter().all(|r| r.avg_prob.is_none()));
     }
 
     #[test]

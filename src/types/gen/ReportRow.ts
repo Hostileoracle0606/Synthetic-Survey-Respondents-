@@ -4,4 +4,12 @@ export type ReportRow = {
 /**
  * Option code, scale point or histogram bin start.
  */
-key: string, label: string, count: number, percent: number, };
+key: string, label: string, count: number, percent: number, 
+/**
+ * Distribution mode (SPEC §8, BACKLOG B23): this option's average recorded probability,
+ * as a percentage (0–100, same scale as `percent`) across respondents the run probed,
+ * charted next to the sampled count. `None` on every row when the run didn't use
+ * distribution mode, or for chart types it doesn't cover (only single-choice answers are
+ * probed).
+ */
+avgProb: number | null, };

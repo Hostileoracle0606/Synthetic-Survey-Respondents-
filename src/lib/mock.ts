@@ -222,7 +222,7 @@ function questionReport(q: Question, n: number): QuestionReport {
   };
   if (b.questionType === "single_choice" || b.questionType === "multi_choice") {
     const counts = b.questionType === "multi_choice" ? b.options.map((_, i) => Math.round(n * (0.7 - i * 0.12))) : split(n, b.options.length, q.id);
-    return { ...base, chart: b.questionType === "multi_choice" ? "multi_bar" : b.options.length <= 6 ? "pie" : "bar", rows: b.options.map((o, i) => ({ key: o.code, label: o.label, count: counts[i], percent: pct(counts[i], n) })) };
+    return { ...base, chart: b.questionType === "multi_choice" ? "multi_bar" : b.options.length <= 6 ? "pie" : "bar", rows: b.options.map((o, i) => ({ key: o.code, label: o.label, count: counts[i], percent: pct(counts[i], n), avgProb: null })) };
   }
   if (b.questionType === "likert" && b.scale) {
     const k = b.scale.max - b.scale.min + 1;
@@ -230,7 +230,7 @@ function questionReport(q: Question, n: number): QuestionReport {
     const rows = counts.map((c, i) => {
       const v = b.scale!.min + i;
       const label = v === b.scale!.min ? `${v} – ${b.scale!.minLabel}` : v === b.scale!.max ? `${v} – ${b.scale!.maxLabel}` : String(v);
-      return { key: String(v), label, count: c, percent: pct(c, n) };
+      return { key: String(v), label, count: c, percent: pct(c, n), avgProb: null };
     });
     const mean = Math.round((counts.reduce((a, c, i) => a + c * (b.scale!.min + i), 0) / n) * 100) / 100;
     const mid = k % 2 ? rows[(k - 1) / 2].percent : null;
@@ -241,7 +241,7 @@ function questionReport(q: Question, n: number): QuestionReport {
     const w = (b.numeric.max - b.numeric.min) / 8;
     return {
       ...base, chart: "histogram", unit: b.numeric.unit || null, median: 900, q1: 600, q3: 1200, mean: 935,
-      rows: counts.map((c, i) => ({ key: String(b.numeric!.min + i * w), label: `${b.numeric!.min + i * w}–${b.numeric!.min + (i + 1) * w}`, count: c, percent: pct(c, n) })),
+      rows: counts.map((c, i) => ({ key: String(b.numeric!.min + i * w), label: `${b.numeric!.min + i * w}–${b.numeric!.min + (i + 1) * w}`, count: c, percent: pct(c, n), avgProb: null })),
     };
   }
   const t = [["Price is too high", 0.46], ["Current phone still works", 0.31], ["Waiting for a deal", 0.14]] as const;
@@ -408,7 +408,7 @@ export const mock = {
     const q = s.questions.find((x) => x.id === questionId)!;
     const n = run?.respondentsDone ?? 0;
     const r = questionReport(q, n);
-    const cols = r.themes.length ? r.themes.map((t) => ({ key: String(t.id), label: t.label, count: t.count, percent: t.percent })) : r.chart === "histogram" ? [] : r.rows;
+    const cols = r.themes.length ? r.themes.map((t) => ({ key: String(t.id), label: t.label, count: t.count, percent: t.percent, avgProb: null })) : r.chart === "histogram" ? [] : r.rows;
     const groups = { age: ["18–29", "30–44", "45–59", "60+"], gender: ["Female", "Male"], region: ["Ontario", "Quebec", "British Columbia", "Prairies", "Atlantic"], income: ["Under $50k", "$50k–$100k", "Over $100k"] }[dimension] ?? ["All"];
     return {
       questionId, dimension: { key: dimension, label: dimension }, columns: cols,

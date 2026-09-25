@@ -101,6 +101,7 @@ pub fn run() {
             commands::has_api_key,
             commands::delete_api_key,
             commands::test_connection,
+            commands::probe_logprobs,
             commands::get_settings,
             commands::save_settings,
         ])

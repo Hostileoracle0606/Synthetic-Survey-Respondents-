@@ -728,3 +728,13 @@ pub fn delete_api_key() -> AppResult<()> {
 pub async fn test_connection() -> AppResult<Vec<String>> {
     Ok(gemini()?.list_models().await?)
 }
+
+/// Distribution mode (SPEC §8, BACKLOG B23): whether the answering model actually returns
+/// log-probabilities, so Step 4 can hide the toggle when it doesn't. One tiny real call;
+/// errors count as unsupported rather than failing the caller.
+#[tauri::command]
+pub async fn probe_logprobs(state: State<'_, AppState>) -> AppResult<bool> {
+    let client = gemini()?;
+    let model = flash_model(&state, &client).await?;
+    Ok(client.probe_logprobs(&model).await)
+}

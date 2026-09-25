@@ -576,6 +576,7 @@ pub fn score(
                 label: k.clone(),
                 count: (share * f64::from(n)).round() as u32,
                 percent: round(share * 100.0, 1),
+                avg_prob: None,
             })
             .collect();
         let positions: Vec<(usize, usize)> = answers

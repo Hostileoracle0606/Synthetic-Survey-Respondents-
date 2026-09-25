@@ -120,6 +120,8 @@ export const api = {
   setApiKey: (key: string): Promise<void> => (inTauri ? invoke("set_api_key", { key }) : Promise.resolve()),
   deleteApiKey: (): Promise<void> => (inTauri ? invoke("delete_api_key") : Promise.resolve()),
   testConnection: (): Promise<string[]> => (inTauri ? invoke("test_connection") : Promise.resolve(["gemini-mock-flash"])),
+  /** Distribution mode (SPEC §8, BACKLOG B23): whether the answering model returns log-probabilities. */
+  probeLogprobs: (): Promise<boolean> => (inTauri ? invoke("probe_logprobs") : Promise.resolve(false)),
   getSettings: (): Promise<Settings> => (inTauri ? invoke("get_settings") : mock.getSettings()),
   saveSettings: (settings: Settings): Promise<Settings> =>
     inTauri ? invoke("save_settings", { settings }) : mock.saveSettings(settings),
