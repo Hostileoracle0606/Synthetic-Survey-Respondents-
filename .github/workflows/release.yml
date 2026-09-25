@@ -11,6 +11,7 @@ on:
     # to exercise it without publishing.
     paths:
       - ".github/workflows/release.yml"
+      - "crates/evals/**"
       - "scripts/release/**"
   workflow_dispatch:
 
@@ -92,12 +93,98 @@ jobs:
           $installer = Get-ChildItem -Recurse installers -Filter $pattern | Select-Object -First 1
           ./scripts/release/install-smoke.ps1 -Installer $installer.FullName
 
+  upgrade-keeps-data:
+    name: Upgrade preserves projects (${{ matrix.kind }})
+    needs: build
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [nsis, msi]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: installers
+          path: installers
+      - run: cargo build --release -p survey-evals --bin release-db
+      - name: Find the previous release installer
+        id: previous
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $pattern = if ('${{ matrix.kind }}' -eq 'msi') { '*.msi' } else { '*-setup.exe' }
+          $current = Get-ChildItem -Recurse installers -Filter $pattern | Select-Object -First 1
+          if (-not $current) { throw "current ${{ matrix.kind }} installer not found" }
+          $previous = $null
+          $releases = @(gh release list --exclude-drafts --limit 1 --json tagName | ConvertFrom-Json)
+          if ($releases.Count) {
+            New-Item -ItemType Directory -Force previous | Out-Null
+            gh release download $releases[0].tagName --pattern $pattern --dir previous
+            if ($LASTEXITCODE -ne 0) { throw 'could not download the previous release' }
+            $previous = Get-ChildItem -Recurse previous -Filter $pattern | Select-Object -First 1
+          }
+          if (-not $previous) {
+            $previous = $current
+            Write-Host '::notice::No earlier published release exists; running the first-release reinstall rehearsal.'
+          }
+          "current=$($current.FullName)" | Add-Content $env:GITHUB_OUTPUT
+          "previous=$($previous.FullName)" | Add-Content $env:GITHUB_OUTPUT
+      - name: Install previous, upgrade, and verify data
+        shell: pwsh
+        run: >-
+          ./scripts/release/upgrade-keeps-data.ps1
+          -PreviousInstaller '${{ steps.previous.outputs.previous }}'
+          -CurrentInstaller '${{ steps.previous.outputs.current }}'
+          -DbTool target/release/release-db.exe
+
+  network-egress:
+    name: Application network egress
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: installers
+          path: installers
+      - name: Require the live-test key for version tags
+        id: live
+        shell: pwsh
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
+            if ('${{ github.ref_type }}' -eq 'tag') {
+              throw 'A version tag requires GEMINI_API_KEY for the network-egress release check.'
+            }
+            'enabled=false' | Add-Content $env:GITHUB_OUTPUT
+            Write-Host '::notice::GEMINI_API_KEY is absent; the branch pipeline skips the live egress check.'
+          } else {
+            'enabled=true' | Add-Content $env:GITHUB_OUTPUT
+          }
+      - name: Capture and validate application egress
+        if: steps.live.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          $installer = Get-ChildItem -Recurse installers -Filter '*.msi' | Select-Object -First 1
+          ./scripts/release/network-egress.ps1 -Installer $installer.FullName
+
   # Windows 11 VMs from TEST_PLAN §6, registered as self-hosted runners. Set the repository
   # variable RELEASE_VMS to "true" once they exist; until then these jobs are skipped.
   win11-clean:
     name: Clean install on Windows 11 VM
     needs: build
-    if: vars.RELEASE_VMS == 'true'
+    if: vars.RELEASE_VMS == 'true' && startsWith(github.ref, 'refs/tags/v')
     runs-on: [self-hosted, win11-clean]
     steps:
       - uses: actions/checkout@v5
@@ -110,6 +197,23 @@ jobs:
           foreach ($i in Get-ChildItem -Recurse installers -Include *.msi,*-setup.exe) {
             ./scripts/release/install-smoke.ps1 -Installer $i.FullName
           }
+
+  win10-clean:
+    name: Windows 10 bootstrap without WebView2
+    needs: build
+    if: vars.RELEASE_VMS == 'true' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, win10-clean]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: installers
+          path: installers
+      - name: Install WebView2 through the bootstrapper and launch
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Recurse installers -Filter '*-setup.exe' | Select-Object -First 1
+          ./scripts/release/webview2-bootstrap-smoke.ps1 -Installer $installer.FullName
 
   # TEST_PLAN S7 memory_1000 and S10 stream_fps_1000 (BACKLOG B14) on GitHub's windows-latest:
   # a performance-harness build (mock Gemini, no key) streams 1,000 respondents x 20 questions
@@ -148,10 +252,45 @@ jobs:
           name: perf-results
           path: perf-results
 
+  win11-perf:
+    name: Windows 11 GPU performance gate
+    if: vars.RELEASE_VMS == 'true' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, win11-perf]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri icon src-tauri/app-icon.png
+      - run: cargo clippy -p survey-app --features perf -- -D warnings
+      - name: Build the app with the perf harness
+        run: pnpm tauri build --no-bundle --features perf --config scripts/release/perf.tauri.conf.json
+        env:
+          VITE_PERF_HARNESS: "1"
+      - run: cargo build --release -p survey-evals --bin mock-gemini --bin perf-seed
+      - name: Enforce memory and frame-rate budgets on the GPU VM
+        shell: pwsh
+        run: ./scripts/release/perf-1000.ps1 -App target/release/survey-app.exe -Mock target/release/mock-gemini.exe -Seed target/release/perf-seed.exe -StrictFps
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: win11-perf-results
+          path: perf-results
+
   publish:
     name: Draft GitHub release
-    needs: [build, install-smoke, perf]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, install-smoke, upgrade-keeps-data, network-egress, perf, win11-clean, win10-clean, win11-perf]
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') && always() &&
+      !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

@@ -197,6 +197,10 @@ Live results, all with gemini-3.8-flash; drafting also picks Flash, because the 
 - **Release smoke on `windows-latest`:**
   - NSIS and MSI each install, launch and uninstall cleanly;
   - idle working set: app 30.8 MB, WebView2 renderer 79.9 MB.
+- **Additional release gates are wired:**
+  - NSIS and MSI preserve a schema-v1 project through install-over-install, startup migration and uninstall;
+  - the production app's live Gemini connectivity call is checked against Windows Filtering Platform events;
+  - the Windows 10 no-WebView2 bootstrap and Windows 11 GPU performance gates are ready for the B26 runners.
 - **Memory (Rust side, 1,000 × 20):** peak 27.8 MB.
 - **Waiting on B22 and B24–B28:** a frozen pack, a certificate and the VMs.
 
