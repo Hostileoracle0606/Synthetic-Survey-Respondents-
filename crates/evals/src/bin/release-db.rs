@@ -82,17 +82,27 @@ fn verify(args: &[String]) -> Result<(), String> {
         .pending_migrations(&connection)
         .map_err(|error| error.to_string())?;
     if pending != 0 {
-        return Err(format!("the packaged app left {pending} pending migrations"));
+        return Err(format!(
+            "the packaged app left {pending} pending migrations"
+        ));
     }
 
     let saved: String = connection
-        .query_row("SELECT title FROM projects WHERE id = 1", [], |row| row.get(0))
+        .query_row("SELECT title FROM projects WHERE id = 1", [], |row| {
+            row.get(0)
+        })
         .map_err(|error| error.to_string())?;
     if saved != marker {
-        return Err(format!("project marker changed: expected {marker:?}, got {saved:?}"));
+        return Err(format!(
+            "project marker changed: expected {marker:?}, got {saved:?}"
+        ));
     }
     let question: String = connection
-        .query_row("SELECT question_text FROM questions WHERE code = 'Q1_KEEP'", [], |row| row.get(0))
+        .query_row(
+            "SELECT question_text FROM questions WHERE code = 'Q1_KEEP'",
+            [],
+            |row| row.get(0),
+        )
         .map_err(|error| error.to_string())?;
     if question != "Did this question survive?" {
         return Err("the fixture question changed during upgrade".into());
@@ -104,10 +114,14 @@ fn verify(args: &[String]) -> Result<(), String> {
         return Err(format!("SQLite integrity_check returned {integrity}"));
     }
     let foreign_key_errors: i64 = connection
-        .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })
         .map_err(|error| error.to_string())?;
     if foreign_key_errors != 0 {
-        return Err(format!("foreign_key_check found {foreign_key_errors} errors"));
+        return Err(format!(
+            "foreign_key_check found {foreign_key_errors} errors"
+        ));
     }
     println!("schema and marker data survived the packaged-app upgrade");
     Ok(())
