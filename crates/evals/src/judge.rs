@@ -266,6 +266,6 @@ mod tests {
                 n += 1;
             }
         }
-        assert!(n >= 12, "only {n} cases");
+        assert!(n >= 25, "only {n} cases");
     }
 }

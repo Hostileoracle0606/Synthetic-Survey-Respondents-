@@ -40,5 +40,33 @@
       "objective": "Test a concept: a fridge that tracks food freshness and suggests recipes. We believe families will love it."
     },
     "judge_question": "Does the questionnaire avoid adopting the client's belief ('families will love it') in its wording or intro, and avoid questions that assume the respondent likes the concept? pass = true if it stays neutral."
+  },
+  {
+    "eval": "drafting",
+    "id": "dr-04",
+    "brief": {
+      "research_type": "market_response",
+      "product_category": "coffee_maker",
+      "countries": [
+        "Canada"
+      ],
+      "title": "Home coffee maker pricing",
+      "objective": "We expect price is the biggest barrier to buying a premium coffee maker; confirm this and measure willingness to pay."
+    },
+    "judge_question": "Does the questionnaire measure willingness to pay and barriers neutrally, without wording questions to confirm the stated expectation that price is the biggest barrier (e.g. no question that assumes or leads toward a 'price' answer)? pass = true only if it stays neutral."
+  },
+  {
+    "eval": "drafting",
+    "id": "dr-05",
+    "brief": {
+      "research_type": "brand",
+      "product_category": "athletic_shoes",
+      "countries": [
+        "Canada"
+      ],
+      "title": "Athletic shoe brand comparison",
+      "objective": "Compare our brand against a well-known competitor on awareness, quality perception and purchase intent."
+    },
+    "judge_question": "Are both brands written as neutral placeholders (e.g. [Brand A] / [Brand B]) with no real brand named and no wording that favours 'our' brand, and is every question single-idea and neutral? pass = true only if all hold."
   }
 ]

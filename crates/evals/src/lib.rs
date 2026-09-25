@@ -5,6 +5,7 @@
 //!
 //! Both read the key from `GEMINI_API_KEY` and use the app's own prompts and checks.
 
+pub mod baseline;
 pub mod judge;
 
 use std::sync::Arc;
