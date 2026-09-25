@@ -23,6 +23,7 @@ use survey_core::model::{
 };
 use survey_core::report::{self, export};
 use survey_core::{sampling, AppError, AppResult, ErrorCode};
+use tauri_plugin_updater::UpdaterExt;
 
 use crate::{keychain, AppState};
 
@@ -91,6 +92,52 @@ pub fn get_settings(state: State<'_, AppState>) -> AppResult<Settings> {
 #[tauri::command]
 pub fn save_settings(state: State<'_, AppState>, settings: Settings) -> AppResult<Settings> {
     settings_db::save(&*lock(&state)?, &settings)
+}
+
+/// Optional updater (SPEC §10, BACKLOG B25), off by default. Refuses before making any network
+/// call if the Settings toggle is off; otherwise asks the configured endpoint. Until a
+/// signing key and a release endpoint exist (BACKLOG B24, B26), this returns a clear
+/// "not configured" `AppError` rather than a stored update.
+#[tauri::command]
+pub async fn check_for_update(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<Option<survey_core::model::UpdateInfo>> {
+    if !settings_db::get(&*lock(&state)?)?.updates_enabled {
+        return Err(AppError::invalid("updates are turned off in Settings"));
+    }
+    let found = app
+        .updater()
+        .map_err(|e| AppError::new(ErrorCode::Internal, e.to_string()))?
+        .check()
+        .await
+        .map_err(|e| AppError::new(ErrorCode::Internal, e.to_string()))?;
+    let info = found.as_ref().map(|u| survey_core::model::UpdateInfo {
+        version: u.version.clone(),
+        notes: u.body.clone(),
+        date: u.date.map(|d| d.to_string()),
+    });
+    *state.pending_update.lock().await = found;
+    Ok(info)
+}
+
+/// Downloads and installs the update `check_for_update` found. On Windows this exits the app
+/// to run the installer; on other platforms the app must be relaunched by hand.
+#[tauri::command]
+pub async fn install_update(state: State<'_, AppState>) -> AppResult<()> {
+    if !settings_db::get(&*lock(&state)?)?.updates_enabled {
+        return Err(AppError::invalid("updates are turned off in Settings"));
+    }
+    let update = state
+        .pending_update
+        .lock()
+        .await
+        .take()
+        .ok_or_else(|| AppError::invalid("no update found; call check_for_update first"))?;
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| AppError::new(ErrorCode::Internal, e.to_string()))
 }
 
 #[tauri::command]

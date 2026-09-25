@@ -27,6 +27,7 @@ import type { RunConfig } from "../types/gen/RunConfig";
 import type { RunProgress } from "../types/gen/RunProgress";
 import type { Settings } from "../types/gen/Settings";
 import type { SimulationRun } from "../types/gen/SimulationRun";
+import type { UpdateInfo } from "../types/gen/UpdateInfo";
 import type { Survey } from "../types/gen/Survey";
 import type { SurveyInfo } from "../types/gen/SurveyInfo";
 import { defaultQuotaGroups } from "./quota";
@@ -122,6 +123,9 @@ export const api = {
   testConnection: (): Promise<string[]> => (inTauri ? invoke("test_connection") : Promise.resolve(["gemini-mock-flash"])),
   /** Distribution mode (SPEC §8, BACKLOG B23): whether the answering model returns log-probabilities. */
   probeLogprobs: (): Promise<boolean> => (inTauri ? invoke("probe_logprobs") : Promise.resolve(false)),
+  /** Optional updater (SPEC §10, BACKLOG B25), off unless Settings turns it on. */
+  checkForUpdate: (): Promise<UpdateInfo | null> => (inTauri ? invoke("check_for_update") : Promise.resolve(null)),
+  installUpdate: (): Promise<void> => (inTauri ? invoke("install_update") : Promise.resolve()),
   getSettings: (): Promise<Settings> => (inTauri ? invoke("get_settings") : mock.getSettings()),
   saveSettings: (settings: Settings): Promise<Settings> =>
     inTauri ? invoke("save_settings", { settings }) : mock.saveSettings(settings),

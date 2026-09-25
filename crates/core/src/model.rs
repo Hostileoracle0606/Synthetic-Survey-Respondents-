@@ -878,4 +878,20 @@ pub struct Settings {
     pub usage_tier: UsageTier,
     pub flash_price: Option<ModelPrice>,
     pub pro_price: Option<ModelPrice>,
+    /// Optional Tauri updater (SPEC §10, BACKLOG B25), off by default. Checking or installing
+    /// an update needs a signed release and a configured endpoint (BACKLOG B24, B26); until
+    /// those exist, turning this on still just gets a clear "not configured" error.
+    #[serde(default)]
+    pub updates_enabled: bool,
+}
+
+/// An update `check_for_update` found waiting (BACKLOG B25).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UpdateInfo {
+    pub version: String,
+    pub notes: Option<String>,
+    /// ISO-8601, when the release announced it.
+    pub date: Option<String>,
 }

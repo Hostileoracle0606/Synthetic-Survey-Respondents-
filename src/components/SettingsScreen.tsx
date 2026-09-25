@@ -11,7 +11,7 @@ const USAGE_TIERS: { value: UsageTier; label: string }[] = [
   { value: "tier3", label: "Tier 3" },
 ];
 
-const DEFAULT_SETTINGS: Settings = { flashModel: null, proModel: null, usageTier: "free", flashPrice: null, proPrice: null };
+const DEFAULT_SETTINGS: Settings = { flashModel: null, proModel: null, usageTier: "free", flashPrice: null, proPrice: null, updatesEnabled: false };
 
 const toText = (n: number | null | undefined) => (n == null ? "" : String(n));
 const toNumber = (s: string) => (s.trim() === "" ? null : Number(s));
@@ -30,6 +30,8 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
   const [keyStatus, setKeyStatus] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState("");
+  const [updateFound, setUpdateFound] = useState(false);
 
   useEffect(() => {
     api.hasApiKey().then(setHasKey).catch(() => setHasKey(false));
@@ -101,6 +103,38 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
       setSaveStatus("Saved.");
     } catch (e) {
       setSaveStatus(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function checkForUpdate() {
+    setBusy(true);
+    setUpdateStatus("Checking…");
+    setUpdateFound(false);
+    try {
+      const found = await api.checkForUpdate();
+      if (found) {
+        setUpdateFound(true);
+        setUpdateStatus(`Version ${found.version} is available${found.notes ? `: ${found.notes}` : "."}`);
+      } else {
+        setUpdateStatus("You have the latest version.");
+      }
+    } catch (e) {
+      setUpdateStatus(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function installUpdate() {
+    setBusy(true);
+    setUpdateStatus("Downloading and installing…");
+    try {
+      await api.installUpdate();
+      setUpdateStatus("Installed. The app will restart.");
+    } catch (e) {
+      setUpdateStatus(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -201,6 +235,24 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
               <input id="pro-output" type="number" min={0} step="0.001" className={pillField} value={toText(settings.proPrice?.outputUsdPerMillion)} onChange={(e) => setPrice("proPrice", { output: e.target.value })} />
             </div>
           </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-b border-divider pb-6">
+          <Label htmlFor="updates-enabled">Updates</Label>
+          <Help>Off by default (SPEC §10): no update check unless this is on. Needs a signed release and a configured endpoint; until then, checking just reports that clearly.</Help>
+          <label className="flex items-center gap-2 text-sm">
+            <input id="updates-enabled" type="checkbox" checked={settings.updatesEnabled} onChange={(e) => setSettingsState({ ...settings, updatesEnabled: e.target.checked })} />
+            Check for updates
+          </label>
+          {settings.updatesEnabled && (
+            <div className="flex items-center justify-between gap-4">
+              <span role="status" className="text-sm text-muted">{updateStatus}</span>
+              <div className="flex gap-3">
+                <button type="button" className={pillButton} disabled={busy} onClick={checkForUpdate}>Check now</button>
+                {updateFound && <button type="button" className={primaryButton} disabled={busy} onClick={installUpdate}>Install and restart</button>}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-4">

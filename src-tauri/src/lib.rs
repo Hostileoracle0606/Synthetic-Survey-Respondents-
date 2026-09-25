@@ -27,11 +27,15 @@ pub struct AppState {
     pub models: tokio::sync::Mutex<Option<Vec<String>>>,
     /// Pause/Stop switches for the simulation runs in progress, by run id.
     pub runs: Arc<Mutex<HashMap<i64, tokio::sync::watch::Sender<Mode>>>>,
+    /// The update `check_for_update` last found, so `install_update` doesn't need to re-check
+    /// (BACKLOG B25).
+    pub pending_update: tokio::sync::Mutex<Option<tauri_plugin_updater::Update>>,
 }
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -60,6 +64,7 @@ pub fn run() {
                 limiter: Arc::new(RateLimiter::new(limits, used_today)),
                 models: tokio::sync::Mutex::new(None),
                 runs: Arc::new(Mutex::new(HashMap::new())),
+                pending_update: tokio::sync::Mutex::new(None),
             });
             Ok(())
         })
@@ -102,6 +107,8 @@ pub fn run() {
             commands::delete_api_key,
             commands::test_connection,
             commands::probe_logprobs,
+            commands::check_for_update,
+            commands::install_update,
             commands::get_settings,
             commands::save_settings,
         ])

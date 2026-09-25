@@ -6,4 +6,10 @@ import type { UsageTier } from "./UsageTier";
  * Settings screen (BACKLOG B1): everything but the API key itself, which stays in the OS
  * keychain. `null` model IDs mean "pick automatically" (newest stable Flash / Pro).
  */
-export type Settings = { flashModel: string | null, proModel: string | null, usageTier: UsageTier, flashPrice: ModelPrice | null, proPrice: ModelPrice | null, };
+export type Settings = { flashModel: string | null, proModel: string | null, usageTier: UsageTier, flashPrice: ModelPrice | null, proPrice: ModelPrice | null, 
+/**
+ * Optional Tauri updater (SPEC §10, BACKLOG B25), off by default. Checking or installing
+ * an update needs a signed release and a configured endpoint (BACKLOG B24, B26); until
+ * those exist, turning this on still just gets a clear "not configured" error.
+ */
+updatesEnabled: boolean, };

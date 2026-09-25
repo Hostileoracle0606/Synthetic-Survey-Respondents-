@@ -29,7 +29,7 @@ const BIASES = [["Status quo", "Price anchoring"], ["Brand-loyal", "Social proof
 let project: Project | null = null;
 let cohort: Cohort | null = null;
 let people: RespondentDetail[] = [];
-let settings: Settings = { flashModel: null, proModel: null, usageTier: "free", flashPrice: null, proPrice: null };
+let settings: Settings = { flashModel: null, proModel: null, usageTier: "free", flashPrice: null, proPrice: null, updatesEnabled: false };
 
 function person(i: number): RespondentDetail {
   const name = `${FIRST[i % 12]} ${LAST[(i * 5) % 12]}`;

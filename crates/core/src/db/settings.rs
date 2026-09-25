@@ -56,6 +56,7 @@ mod tests {
                 cached_input_usd_per_million: Some(0.0075),
             }),
             pro_price: None,
+            updates_enabled: false,
         };
         save(&conn, &s).unwrap();
         assert_eq!(get(&conn).unwrap(), s);
