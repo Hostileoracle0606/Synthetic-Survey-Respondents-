@@ -172,7 +172,8 @@ Exit criteria:
   - the S12 `prompt-evals` harness with 14 cases;
   - the release workflow, with signing ready for a certificate;
   - the Rust memory test.
-- **Not built:** log-probability mode (B23) and the updater (B25).
+- **Built since:** log-probability mode (B23; not yet exercised against a live model — no `GEMINI_API_KEY` was available to confirm `probe_logprobs` or a real `logprobsResult` shape).
+- **Not built:** the updater (B25).
 - **Log redaction:** nothing is needed. The app writes no log files, the key lives only in the OS keychain, and `GeminiClient`'s Debug output redacts it.
 
 Live results, all with gemini-3.8-flash; drafting also picks Flash, because the only stable Pro (2.5) is an older generation and closed to new keys:
