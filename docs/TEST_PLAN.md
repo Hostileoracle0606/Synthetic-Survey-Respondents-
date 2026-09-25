@@ -316,7 +316,7 @@ Covers SM9, SM17.
 | `size_regression` | PR | Warn when the installer grows > 500 KB vs `main` |
 | `clean_install_win11` | Release | Windows 11 VM restored to its clean snapshot (§6): install, launch, create project, uninstall; no files left except user data |
 | `clean_install_win10_no_webview2` | Release, only while Windows 10 stays a target (spec §11) | Windows 10 VM without WebView2: bootstrapper installs it, then the app launches |
-| `signature_valid` | Release | `signtool verify /pa` passes for both installers |
+| `signature_valid` | Release | `signtool verify /pa` passes for the application executable and both installers, all signed by the certificate imported for that build |
 | `upgrade_keeps_data` | Release | Install vN, create data, install vN+1: migrations run and data is intact |
 
 ## 5. Ownership and milestones
