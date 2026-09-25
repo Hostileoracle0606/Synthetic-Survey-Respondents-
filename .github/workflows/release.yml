@@ -1,7 +1,7 @@
 name: Release
 
-# Tag vX.Y.Z to build, sign (when a certificate is configured), smoke-test and publish a
-# draft release. TEST_PLAN S14 (packaging and install) and §6 (Windows VMs).
+# Tag vX.Y.Z to build, sign, smoke-test and publish a draft release. Branch and manual runs
+# may build unsigned to exercise the pipeline. TEST_PLAN S14 and §6 (Windows VMs).
 
 on:
   push:
@@ -21,9 +21,6 @@ jobs:
   build:
     name: Build and sign installers
     runs-on: windows-latest
-    env:
-      CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE }}
-      CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -35,28 +32,34 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri icon src-tauri/app-icon.png
-      - run: pnpm tauri build
-      # Authenticode: runs only when the WINDOWS_CERTIFICATE secret (base64 .pfx) is set.
-      # Without it the installers ship unsigned, and the summary says so (open decision).
-      - name: Sign installers
-        if: env.CERT_PFX_BASE64 != ''
+      - name: Prepare Windows code signing
+        id: signing
         shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: ./scripts/release/prepare-signing.ps1
+      - name: Build application and installers
+        shell: pwsh
+        env:
+          TAURI_SIGNING_CONFIG: ${{ steps.signing.outputs.config }}
         run: |
-          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT_PFX_BASE64))
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
-          $files = Get-ChildItem -Recurse target/release/bundle -Include *.msi,*-setup.exe
-          foreach ($f in $files) {
-            & $signtool.FullName sign /f $pfx /p $env:CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $f.FullName
-            if ($LASTEXITCODE -ne 0) { throw "signing $($f.Name) failed" }
-            & $signtool.FullName verify /pa $f.FullName   # TEST_PLAN S14 signature_valid
-            if ($LASTEXITCODE -ne 0) { throw "signature on $($f.Name) does not verify" }
+          if ($env:TAURI_SIGNING_CONFIG) {
+            pnpm tauri build --config $env:TAURI_SIGNING_CONFIG
+          } else {
+            pnpm tauri build
           }
-          Remove-Item $pfx
-      - name: Unsigned build notice
-        if: env.CERT_PFX_BASE64 == ''
+          if ($LASTEXITCODE -ne 0) { throw 'Tauri build failed' }
+      - name: Verify application and installer signatures
+        if: steps.signing.outputs.enabled == 'true'
         shell: pwsh
-        run: echo "::warning::No WINDOWS_CERTIFICATE secret; installers are unsigned (SmartScreen will warn users)."
+        env:
+          EXPECTED_THUMBPRINT: ${{ steps.signing.outputs.thumbprint }}
+        run: ./scripts/release/verify-signatures.ps1 -ExpectedThumbprint $env:EXPECTED_THUMBPRINT
+      - name: Unsigned build notice
+        if: steps.signing.outputs.enabled != 'true'
+        shell: pwsh
+        run: Write-Host '::warning::This non-tag pipeline check is unsigned. Version tags require a trusted certificate.'
       - name: Installers are under 15 MB
         shell: pwsh
         run: |
@@ -70,6 +73,15 @@ jobs:
           path: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*-setup.exe
+      - name: Remove signing certificate from runner
+        if: always() && steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          SIGNING_THUMBPRINT: ${{ steps.signing.outputs.thumbprint }}
+          TAURI_SIGNING_CONFIG: ${{ steps.signing.outputs.config }}
+        run: |
+          Remove-Item "Cert:\CurrentUser\My\$env:SIGNING_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+          Remove-Item $env:TAURI_SIGNING_CONFIG -Force -ErrorAction SilentlyContinue
 
   install-smoke:
     name: Install, launch, uninstall (${{ matrix.kind }})

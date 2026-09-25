@@ -8,6 +8,7 @@ Windows desktop app (Tauri v2 + Rust + React) that runs market-research surveys 
 - [Data and backend flow (wizard UI)](docs/DATA_FLOW.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [Test plan](docs/TEST_PLAN.md)
+- [Windows code signing](docs/CODE_SIGNING.md)
 - [Backlog: deferred and unapplied work](docs/BACKLOG.md)
 - [SQLite schema](docs/schema.sql)
 
