@@ -101,13 +101,17 @@ jobs:
       # TEST_PLAN S13 smoke: a 100-person Canadian cohort answers the benchmark pack.
       - name: Fidelity benchmark (smoke)
         run: cargo run -q --release -p survey-evals --bin fidelity -- run --cohort-size 100 --out fidelity-report.json
-      # TEST_PLAN S12: prompt-behaviour evals with a Gemini judge.
+      # TEST_PLAN S12: prompt-behaviour evals with a Gemini judge, graded against the baselines
+      # committed in evals/results.jsonl (BACKLOG B29); a person updates them with
+      # `prompt-evals --set-baseline` once a run's numbers look right. This job appends to the
+      # working copy for its own run but does not commit, so history only grows when a person
+      # does that deliberately.
       - name: Prompt evals
-        run: cargo run -q --release -p survey-evals --bin prompt-evals -- --out evals-results.jsonl
+        run: cargo run -q --release -p survey-evals --bin prompt-evals
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: live-reports
           path: |
             fidelity-report.json
-            evals-results.jsonl
+            evals/results.jsonl
